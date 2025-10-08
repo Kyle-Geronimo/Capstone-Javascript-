@@ -2,39 +2,51 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Chatbot Workplace - Sign Up</title>
+  <title>Chatbot Workplace</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="../css/styles.css">
+  <link rel="stylesheet" href="css/styles.css">
 
   <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <style>
+    #auth-container .action-btn {
+      font-size: 1.25rem;
+      padding: 18px 32px;
+      min-width: 140px;
+    }
+  </style>
 </head>
 <body>
   <header>
     <div class="container">
       <h1>Chatbot Workplace</h1>
       <nav>
-        <a href="../index.html" class="nav-btn">Home</a>
+        <a href="../index.html" class="nav-btn active">Home</a>
+        <a href="../pages/modules.html" class="nav-btn">Modules</a>
+        <a href="../pages/chatbot.html" class="nav-btn">Chatbot Data</a>
+        <a href="../pages/admin.html" class="nav-btn">Admin</a>
+        <a href="../pages/profile.html" class="nav-btn">Profile</a>
+        <button id="logout-btn" class="nav-btn" style="display:none;">Logout</button>
       </nav>
     </div>
   </header>
 
   <main>
+
     <section class="page">
-      <div class="form-container">
-        <h2>Sign Up</h2>
-        <input id="signup-email" type="email" placeholder="Email">
-        <input id="signup-password" type="password" placeholder="Password">
-        <select id="signup-role">
-          <option value="employee">Employee</option>
-          <option value="admin">Admin</option>
-        </select>
-        <button id="signup-btn" class="action-btn">Sign Up</button>
-        <p>Already have an account? <a href="login.html">Login</a></p>
+      <div class="form-container" id="auth-container" style="text-align:center;">
+        <h2>Welcome to D' Mariners Inn Hotel's Management</h2>
+        <div style="display: flex; justify-content: center; gap: 24px; margin-top: 16px;">
+          <button id="login-btn" class="action-btn">Login</button>
+          <button id="signup-btn" class="action-btn">Sign Up</button>
+        </div>
       </div>
     </section>
+
+
+
   </main>
 
   <footer>
@@ -43,27 +55,35 @@
     </div>
   </footer>
 
-  <script type="module" src="../js/firebase-config.js"></script>
-  <script type="module" src="../js/auth.js"></script>
+  <script type="module" src="js/firebase-config.js"></script>
+  <script type="module" src="js/auth.js"></script>
   <script type="module">
-    import { signup } from '../js/auth.js';
-    import { auth } from '../js/firebase-config.js';
+    import { logout } from './js/auth.js';
+    import { auth } from './js/firebase-config.js';
 
-    document.getElementById('signup-btn').addEventListener('click', async () => {
-      const email = document.getElementById('signup-email').value;
-      const password = document.getElementById('signup-password').value;
-      const role = document.getElementById('signup-role').value;
+    const loginBtn = document.getElementById('login-btn');
+    const signupBtn = document.getElementById('signup-btn');
+    const logoutBtn = document.getElementById('logout-btn');
 
-      try {
-        await signup(email, password, role);
-        window.location.href = '../index.html';
-      } catch (err) {
-        alert(err.message);
-      }
+    loginBtn.addEventListener('click', () => {
+      window.location.href = "pages/login.html";
+    });
+
+    signupBtn.addEventListener('click', () => {
+      window.location.href = "pages/signup.html";
+    });
+
+    logoutBtn.addEventListener('click', async () => {
+      await logout();
+      logoutBtn.style.display = 'none';
     });
 
     auth.onAuthStateChanged(user => {
-      if (user) window.location.href = '../index.html';
+      if (user) {
+        logoutBtn.style.display = '';
+      } else {
+        logoutBtn.style.display = 'none';
+      }
     });
   </script>
 </body>
