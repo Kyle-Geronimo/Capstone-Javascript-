@@ -1,6 +1,6 @@
 # Chatbot Workplace
 
-A web-based workplace dashboard for managing chatbot modules, user profiles, and authentication using Firebase.
+A web-based workplace dashboard for managing chatbot modules, user profiles, authentication, and admin account approvals using Firebase.
 
 ## Features
 
@@ -8,6 +8,7 @@ A web-based workplace dashboard for managing chatbot modules, user profiles, and
 - **Profile Management:** View user email and role in a styled profile card.
 - **Module Control:** Toggle and view status of multiple chatbot modules in a responsive grid.
 - **Chatbot Data:** Access and display chatbot-related data.
+- **Admin Page:** View and approve account creation requests.
 - **Responsive Design:** Modern UI with a clean, blue-themed layout.
 
 ## Folder Structure
@@ -17,11 +18,14 @@ javascript_website/
 ├── css/
 │   └── styles.css
 ├── js/
+│   ├── admin.js
 │   ├── auth.js
 │   ├── firebase-config.js
 │   ├── modules.js
-│   └── profile.js
+│   ├── profile.js
+│   └── chatbot.js
 ├── pages/
+│   ├── admin.html
 │   ├── chatbot.html
 │   ├── login.html
 │   ├── modules.html
@@ -50,6 +54,8 @@ javascript_website/
   - View user information and log out.
 - **Chatbot Data:**  
   - Display chatbot-related data.
+- **Admin:**  
+  - Admins can view and approve account creation requests.
 
 ## Customization
 
@@ -57,6 +63,8 @@ javascript_website/
   - Modify `css/styles.css` for theme changes.
 - **Modules:**  
   - Add or edit module panels in `pages/modules.html` and logic in `js/modules.js`.
+- **Admin Page:**  
+  - Update `pages/admin.html` and `js/admin.js` for admin features.
 
 ## Dependencies
 
