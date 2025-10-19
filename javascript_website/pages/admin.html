@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin - Account Requests</title>
+  <link rel="stylesheet" href="../css/styles.css">
+
+  <!-- Firebase compat SDKs required by js/firebase-config.js -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>Chatbot Workplace</h1>
+      <nav>
+        <a href="../index.html" class="nav-btn">Home</a>
+        <a href="modules.html" class="nav-btn">Modules</a>
+        <a href="chatbot.html" class="nav-btn">Chatbot Data</a>
+        <a href="admin.html" class="nav-btn active">Admin</a>
+        <a href="profile.html" class="nav-btn">Profile</a>
+        <button id="logout-btn" class="nav-btn" style="display:none;">Logout</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="page">
+      <section class="content-container">
+        <h2>Account Management</h2>
+
+        <!-- Admin grid: requests (left) — divider — accounts (right) -->
+        <div class="admin-grid">
+          <div class="chatbot-data-container requests-panel">
+            <h3>Account Creation Requests</h3>
+            <div id="requests" class="request-list">
+              <em>Loading requests…</em>
+            </div>
+          </div>
+
+          <div class="admin-divider" aria-hidden="true"></div>
+
+          <div class="chatbot-data-container accounts-panel">
+            <h3>Accounts (Admins first)</h3>
+            <div id="accounts" class="accounts-list">
+              <em>Loading accounts…</em>
+            </div>
+          </div>
+        </div>
+
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>&copy; 2025 D’ Mariners Inn Hotel. All rights reserved.</p>
+    </div>
+  </footer>
+  
+  <script type="module" src="../js/admin.js"></script>
+</body>
+</html>

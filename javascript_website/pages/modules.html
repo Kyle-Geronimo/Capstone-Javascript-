@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Chatbot Workplace - Modules</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="../css/styles.css">
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>Chatbot Workplace</h1>
+      <nav>
+        <a href="../index.html" class="nav-btn">Home</a>
+        <a href="../pages/modules.html" class="nav-btn active">Modules</a>
+        <a href="../pages/chatbot.html" class="nav-btn">Chatbot Data</a>
+        <a href="../pages/admin.html" class="nav-btn">Admin</a>
+        <a href="../pages/profile.html" class="nav-btn">Profile</a>
+        <button id="logout-btn" class="nav-btn" style="display:none;">Logout</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="content-container">
+      <div class="grid-container" style="grid-template-columns: repeat(3, 1fr);">
+        <div class="module-panel">
+          <h3>Conversation Module</h3>
+          <p>Status: <span id="status-1">Active</span></p>
+          <button class="action-btn" id="toggle-1">Toggle</button>
+        </div>
+        <div class="module-panel">
+          <h3>Info Provider Module</h3>
+          <p>Status: <span id="status-2">Inactive</span></p>
+          <button class="action-btn" id="toggle-2">Toggle</button>
+        </div>
+        <div class="module-panel">
+          <h3>Info Gathering Module</h3>
+          <p>Status: <span id="status-3">Active</span></p>
+          <button class="action-btn" id="toggle-3">Toggle</button>
+        </div>
+        <div class="module-panel">
+          <h3>Module 3</h3>
+          <p>Status: <span id="status-4">Active</span></p>
+          <button class="action-btn" id="toggle-4">Toggle</button>
+        </div>
+        <div class="module-panel">
+          <h3>Module 3</h3>
+          <p>Status: <span id="status-5">Active</span></p>
+          <button class="action-btn" id="toggle-5">Toggle</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>&copy; 2025 D’ Mariners Inn Hotel. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script type="module" src="../js/firebase-config.js"></script>
+  <script type="module" src="../js/modules.js"></script>
+  <script type="module">
+    import { toggleModule, loadModuleStatus } from '../js/modules.js';
+    import { auth } from '../js/firebase-config.js';
+
+    document.getElementById('toggle-module').addEventListener('click', toggleModule);
+
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        document.getElementById('logout-btn').style.display = '';
+        loadModuleStatus();
+      }
+    });
+  </script>
+</body>
+</html>
