@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Chatbot Workplace - Login</title>
+  <title>HotelLink - Login</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="../css/styles.css">
   <!-- Firebase SDKs -->
@@ -13,7 +13,7 @@
 <body>
   <header>
     <div class="container">
-      <h1>Chatbot Workplace</h1>
+      <h1>HotelLink</h1>
       <nav>
         <a href="../index.html" class="nav-btn">Home</a>
       </nav>
@@ -25,9 +25,15 @@
       <div class="form-container">
         <h2>Login</h2>
         <input id="login-email" type="email" placeholder="Email">
-        <input id="login-password" type="password" placeholder="Password">
+        <div class="password-wrap">
+          <input id="login-password" type="password" placeholder="Password">
+          <button type="button" class="toggle-password" data-target="login-password">Show</button>
+        </div>
         <button id="login-btn" class="action-btn">Login</button>
-        <p>Don't have an account? <a href="signup.html">Sign up</a></p>
+        <div class="form-links">
+          <p>Don't have an account? <a href="signup.html">Sign up</a></p>
+          <p><a href="reset-password.html" class="forgot-link">Forgot Password?</a></p>
+        </div>
       </div>
     </section>
   </main>
@@ -40,6 +46,7 @@
 
   <script type="module" src="../js/firebase-config.js"></script>
   <script type="module" src="../js/auth.js"></script>
+  <script type="module" src="../js/show-password.js"></script>
   <script type="module">
   import { login } from '../js/auth.js';
   import { auth } from '../js/firebase-config.js';
