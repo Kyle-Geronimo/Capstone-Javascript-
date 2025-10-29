@@ -47,10 +47,19 @@ javascript_website/
    ```bash
    cd javascript_website
    npm init -y
-   npm install firebase-admin express cors
+   npm install firebase firebase-admin express cors
    ```
 
-3. **Firebase Admin SDK Setup:**
+   Note: This will create a `node_modules` folder with all required dependencies. Do not commit this folder to version control.
+
+3. **Add to .gitignore:**
+   Create or update `.gitignore` file:
+   ```plaintext
+   node_modules/
+   serviceAccountKey.json
+   ```
+
+4. **Firebase Admin SDK Setup:**
    ```bash
    # Install Firebase Admin SDK
    npm install firebase-admin
@@ -70,7 +79,7 @@ javascript_website/
    node server.js
    ```
 
-4. **Get Admin SDK Credentials:**
+5. **Get Admin SDK Credentials:**
    - Go to Firebase Console → Project Settings → Service Accounts
    - Click "Generate New Private Key"
    - Save the JSON file as `serviceAccountKey.json` in your project root
@@ -80,7 +89,7 @@ javascript_website/
      node_modules/
      ```
 
-5. **Firebase Console Setup:**
+6. **Firebase Console Setup:**
    - Create a new Firebase project at [Firebase Console](https://console.firebase.google.com)
    - Enable Authentication with Email/Password sign-in method
    - Create a Cloud Firestore database
@@ -90,7 +99,7 @@ javascript_website/
      - Click the web icon (</>)
      - Register your app and copy the config object
 
-6. **Configure Firebase in your project:**
+7. **Configure Firebase in your project:**
    - Update `js/firebase-config.js` with your Firebase configuration
    - Download your service account key:
      - Go to Project Settings → Service accounts
@@ -98,7 +107,7 @@ javascript_website/
      - Save as `serviceAccountKey.json` in your project root
      - Add it to `.gitignore`
 
-7. **Set up Firestore Rules:**
+8. **Set up Firestore Rules:**
    - Go to Firestore Database → Rules
    - Replace with these rules:
    ```javascript
@@ -120,7 +129,7 @@ javascript_website/
    }
    ```
 
-8. **Add Authorized Domains:**
+9. **Add Authorized Domains:**
    - Go to Authentication → Settings → Authorized domains
    - Add: `localhost` and `127.0.0.1`
 
