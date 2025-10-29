@@ -4,12 +4,17 @@ A web-based workplace dashboard for managing chatbot modules, user profiles, aut
 
 ## Features
 
-- **User Authentication:** Sign up, log in, and log out with Firebase Auth.
-- **Profile Management:** View user email and role in a styled profile card.
-- **Module Control:** Toggle and view status of multiple chatbot modules in a responsive grid.
-- **Chatbot Data:** Access and display chatbot-related data.
-- **Admin Page:** View and approve account creation requests.
-- **Responsive Design:** Modern UI with a clean, blue-themed layout.
+- **User Authentication:** Sign up, log in, and log out with Firebase Auth
+- **Profile Management:** 
+  - View and edit user profile information
+  - Upload or change profile pictures
+  - Customizable profile avatars with initials
+- **Module Control:** Toggle and view status of multiple chatbot modules in a responsive grid
+- **Chatbot Data:** Access and display chatbot-related data
+- **Admin Panel:** 
+  - View and approve/reject account creation requests
+  - Manage existing user accounts
+- **Responsive Design:** Modern UI with gradient themes and interactive elements
 
 ## Folder Structure
 
@@ -34,42 +39,124 @@ javascript_website/
 └── index.html
 ```
 
-## Getting Started
+## Setup Instructions
 
-1. **Clone the repository** and open the folder in VS Code.
-2. **Configure Firebase:**  
-   - Update `js/firebase-config.js` with your Firebase project credentials.
-3. **Run locally:**  
-   - Open `index.html` in your browser or use a local server extension in VS Code. You can use the Live Server extension.
+1. **Clone the repository** and open the folder in VS Code
+
+2. **Install Dependencies:**
+   ```bash
+   cd javascript_website
+   npm init -y
+   npm install firebase-admin express cors
+   ```
+
+3. **Firebase Admin SDK Setup:**
+   ```bash
+   # Install Firebase Admin SDK
+   npm install firebase-admin
+   ```
+   
+   Create a new file `server.js` in your project root
+
+   Add this to your package.json:
+   ```json
+   {
+     "type": "module"
+   }
+   ```
+
+   Start the admin server:
+   ```bash
+   node server.js
+   ```
+
+4. **Get Admin SDK Credentials:**
+   - Go to Firebase Console → Project Settings → Service Accounts
+   - Click "Generate New Private Key"
+   - Save the JSON file as `serviceAccountKey.json` in your project root
+   - Add to `.gitignore`:
+     ```
+     serviceAccountKey.json
+     node_modules/
+     ```
+
+5. **Firebase Console Setup:**
+   - Create a new Firebase project at [Firebase Console](https://console.firebase.google.com)
+   - Enable Authentication with Email/Password sign-in method
+   - Create a Cloud Firestore database
+   - Get your Firebase configuration:
+     - Go to Project Settings → General
+     - Scroll to "Your apps" section
+     - Click the web icon (</>)
+     - Register your app and copy the config object
+
+6. **Configure Firebase in your project:**
+   - Update `js/firebase-config.js` with your Firebase configuration
+   - Download your service account key:
+     - Go to Project Settings → Service accounts
+     - Click "Generate new private key"
+     - Save as `serviceAccountKey.json` in your project root
+     - Add it to `.gitignore`
+
+7. **Set up Firestore Rules:**
+   - Go to Firestore Database → Rules
+   - Replace with these rules:
+   ```javascript
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       // 🔹 Account requests
+       match /accountRequests/{requestId} {
+         allow create: if true;
+         allow read, write: if request.auth != null;
+       }
+       
+       // 🔹 User profiles
+       match /users/{userId} {
+         allow read: if request.auth != null;
+         allow write: if request.auth != null && request.auth.uid == userId;
+       }
+     }
+   }
+   ```
+
+8. **Add Authorized Domains:**
+   - Go to Authentication → Settings → Authorized domains
+   - Add: `localhost` and `127.0.0.1`
 
 ## Usage
 
-- **Home:**  
-  - Main landing page with Login and Sign Up buttons.
-- **Login/Sign Up:**  
-  - Authenticate users and create new accounts.
-- **Modules:**  
-  - View and control chatbot modules.
-- **Profile:**  
-  - View user information and log out.
-- **Chatbot Data:**  
-  - Display chatbot-related data.
-- **Admin:**  
-  - Admins can view and approve account creation requests.
+- **Home:** Landing page with authentication options
+- **Login/Sign Up:** 
+  - Create new account requests
+  - Login with approved credentials
+- **Profile:** 
+  - View and edit user information
+  - Change profile picture or use initial avatars
+  - Manage account settings
+- **Modules:** Control chatbot modules
+- **Chatbot Data:** Access chatbot information
+- **Admin:** 
+  - Review and manage account requests
+  - View all user accounts
+  - Approve/reject new registrations
 
 ## Customization
 
-- **Styling:**  
-  - Modify `css/styles.css` for theme changes.
-- **Modules:**  
-  - Add or edit module panels in `pages/modules.html` and logic in `js/modules.js`.
-- **Admin Page:**  
-  - Update `pages/admin.html` and `js/admin.js` for admin features.
+- **Styling:** 
+  - Main styles in `css/styles.css`
+  - Theme colors: #4f8cff (primary), #6ed6ff (secondary)
+- **Components:**
+  - Profile components in `js/profile.js`
+  - Admin features in `js/admin.js`
+  - Authentication in `js/auth.js`
 
 ## Dependencies
 
-- [Firebase JS SDK](https://firebase.google.com/docs/web/setup)
-- Modern browsers (Chrome, Edge, Firefox, etc.)
+- Firebase JS SDK 
+- Firebase Admin SDK
+- Express.js (for Admin features)
+- Modern browsers with ES6+ support
 
 ## License
 
