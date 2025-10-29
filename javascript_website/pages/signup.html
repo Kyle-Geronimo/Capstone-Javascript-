@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Chatbot Workplace - Sign Up</title>
+  <title>HotelLink - Sign Up</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../css/styles.css">
 
@@ -14,7 +14,7 @@
 <body>
   <header>
     <div class="container">
-      <h1>Chatbot Workplace</h1>
+      <h1>HotelLink</h1>
       <nav>
         <a href="../index.html" class="nav-btn">Home</a>
       </nav>
@@ -25,8 +25,12 @@
     <section class="page">
       <div class="form-container">
         <h2>Sign Up</h2>
+        <input id="signup-username" type="text" placeholder="Full name">
         <input id="signup-email" type="email" placeholder="Email">
-        <input id="signup-password" type="password" placeholder="Password">
+        <div class="password-wrap">
+          <input id="signup-password" type="password" placeholder="Password">
+          <button type="button" class="toggle-password" data-target="signup-password">Show</button>
+        </div>
         <select id="signup-role">
           <option value="employee">Employee</option>
           <option value="admin">Admin</option>
@@ -45,6 +49,7 @@
 
   <script type="module" src="../js/firebase-config.js"></script>
   <script type="module" src="../js/auth.js"></script>
+  <script type="module" src="../js/show-password.js"></script>
   <script type="module">
     import { signup } from '../js/auth.js';
     import { auth } from '../js/firebase-config.js';
@@ -54,12 +59,13 @@
     try { console.log('auth config:', auth.app ? auth.app.options : auth); } catch(e){ console.warn(e); }
 
     document.getElementById('signup-btn').addEventListener('click', async () => {
+      const username = document.getElementById('signup-username').value.trim();
       const email = document.getElementById('signup-email').value;
       const password = document.getElementById('signup-password').value;
       const role = document.getElementById('signup-role').value;
 
       try {
-        await signup(email, password, role);
+        await signup(email, password, role, username);
         window.location.href = '../index.html';
       } catch (err) {
         console.error('Signup error:', err);
