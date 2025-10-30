@@ -22,6 +22,8 @@ A web-based workplace dashboard for managing chatbot modules, user profiles, aut
 javascript_website/
 ├── css/
 │   └── styles.css
+├── functions/
+│   └── index.js
 ├── js/
 │   ├── admin.js
 │   ├── auth.js
@@ -174,3 +176,4 @@ MIT License
 ---
 
 **Made for Capstone Project 2025**
+
