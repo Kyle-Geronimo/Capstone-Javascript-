@@ -1,0 +1,39 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch index.html (Chrome)",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "file": "${workspaceFolder}/index.html",
+      "cwd": "${workspaceFolder}",
+      "runtimeArgs": ["--new-window"],
+      "webRoot": "${workspaceFolder}"
+    },
+    {
+      "name": "Launch index.html (Edge)",
+      "type": "pwa-msedge",
+      "request": "launch",
+      "file": "${workspaceFolder}/index.html",
+      "cwd": "${workspaceFolder}",
+      "runtimeArgs": ["--new-window"],
+      "webRoot": "${workspaceFolder}"
+    },
+    {
+      "name": "Launch via Live Server (http://localhost:5500)",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://localhost:5500",
+      "webRoot": "${workspaceFolder}"
+    },
+    {
+      "name": "Attach to Node (localhost:9229)",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "restart": true,
+      "localRoot": "${workspaceFolder}",
+      "remoteRoot": "${workspaceFolder}"
+    }
+  ]
+}

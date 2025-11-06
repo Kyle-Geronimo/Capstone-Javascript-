@@ -1,0 +1,124 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isEmployeeOrAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'employee' ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+
+    // Users collection
+    match /users/{userId} {
+      // Anyone authenticated can read basic user info
+      allow read: if isAuthenticated();
+      
+      // Users can update their own profile, admins can update anyone
+      allow update: if isOwner(userId) || isAdmin();
+      
+      // Only admins can create or delete users
+      allow create, delete: if isAdmin();
+    }
+
+    // Attendance collection
+    match /attendance/{attendanceId} {
+      // Everyone can read attendance records
+      allow read: if isAuthenticated();
+      
+      // Users can only create their own attendance records
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid;
+      
+      // Users can only update their own records, admins can update any
+      allow update: if (isAuthenticated() && 
+        resource.data.userId == request.auth.uid) || isAdmin();
+      
+      // Only admins can delete attendance records
+      allow delete: if isAdmin();
+    }
+
+    // Payroll collection
+    match /payroll/{payrollId} {
+      // Users can read only their own payroll records, admins can read all
+      allow read: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || isAdmin());
+      
+      // Only admins can create/update/delete payroll records
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Payroll batches collection
+    match /payrollBatches/{batchId} {
+      // Only admins can read/write payroll batches
+      allow read, write: if isAdmin();
+    }
+
+    // Account requests collection
+    match /accountRequests/{requestId} {
+      // Allow anyone (authenticated or not) to create account requests
+      // as long as the payload is valid. Reading/updating/deleting
+      // is still restricted to admins.
+      allow create: if request.resource.data.status == 'pending' &&
+        request.resource.data.email is string &&
+        request.resource.data.email.matches('^[^@]+@[^@]+\\.[^@]+$');
+
+      // Only admins can read and manage account requests
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Chat collection (for the chatbot)
+    match /chats/{chatId} {
+      // Users can only read their own chats
+      allow read: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || isAdmin());
+      
+      // Users can create their own chats
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid;
+      
+      // Users can update their own chats, admins can update any
+      allow update: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || isAdmin());
+      
+      // Only admins can delete chats
+      allow delete: if isAdmin();
+    }
+
+    // Employee schedules collection
+    match /schedules/{scheduleId} {
+      // Everyone can read schedules
+      allow read: if isAuthenticated();
+      
+      // Only admins can create/update/delete schedules
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Profile data collection
+    match /profiles/{userId} {
+      // Users can read any profile
+      allow read: if isAuthenticated();
+      
+      // Users can only update their own profile, admins can update any
+      allow update: if isOwner(userId) || isAdmin();
+      
+      // Only admins can create/delete profiles
+      allow create, delete: if isAdmin();
+    }
+  }
+}
