@@ -2,51 +2,66 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Chatbot Workplace</title>
+  <title>HotelLink</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="css/styles.css">
-
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <!-- Add login/signup links for public users -->
   <style>
-    #auth-container .action-btn {
-      font-size: 1.25rem;
-      padding: 18px 32px;
-      min-width: 140px;
-    }
+    .public-only { display: none; }
+    .restricted { display: none; }
+    .auth-nav, .user-nav { display: inline-flex; gap: 1rem; }
+    nav { display: flex; align-items: center; gap: 1.5rem; }
   </style>
 </head>
 <body>
   <header>
     <div class="container">
-      <h1>Chatbot Workplace</h1>
+      <h1>HotelLink</h1>
       <nav>
-        <a href="../index.html" class="nav-btn active">Home</a>
-        <a href="../pages/modules.html" class="nav-btn">Modules</a>
-        <a href="../pages/chatbot.html" class="nav-btn">Chatbot Data</a>
-        <a href="../pages/admin.html" class="nav-btn">Admin</a>
-        <a href="../pages/profile.html" class="nav-btn">Profile</a>
-        <button id="logout-btn" class="nav-btn" style="display:none;">Logout</button>
+        <a href="index.html" class="nav-btn">Home</a>
+        <div class="user-nav">
+          <a href="pages/chatbot.html" class="nav-btn restricted">Chatbot Data</a>
+          <a href="pages/admin.html" class="nav-btn restricted admin-only">Admin</a>
+          <a href="pages/profile.html" class="nav-btn restricted">Profile</a>
+          <a href="#" id="logout-btn" class="nav-btn restricted">Logout</a>
+        </div>
       </nav>
     </div>
   </header>
 
-  <main>
+  <script type="module" src="./js/attendance.js"></script>
+  <script type="module" src="./js/auth.js"></script>
 
+  <main>
     <section class="page">
-      <div class="form-container" id="auth-container" style="text-align:center;">
+      <div class="form-container" id="auth-container">
         <h2>Welcome to D' Mariners Inn Hotel's Management</h2>
-        <div style="display: flex; justify-content: center; gap: 24px; margin-top: 16px;">
+        <div id="auth-buttons" class="auth-buttons">
           <button id="login-btn" class="action-btn">Login</button>
           <button id="signup-btn" class="action-btn">Sign Up</button>
         </div>
+        
+        <!-- Attendance Card -->
+        <div class="attendance-card restricted">
+          <h3>Daily Attendance</h3>
+          <div class="button-group center">
+            <button id="checkinBtn" class="scan-btn action-btn">Check In</button>
+            <button id="checkoutBtn" class="scan-btn action-btn">Check Out</button>
+          </div>
+          <div id="scannerContainer" class="scanner-container" style="display: none;">
+            <video id="video" autoplay playsinline></video>
+            <p id="scannerStatus" class="scanner-status"></p>
+            <button id="cancelScanBtn" class="action-btn cancel-btn" style="display: none;">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Weather Dashboard -->
+        <div class="weather-dashboard">
+          <h3>Local Weather Information</h3>
+          <div id="weather-container" class="weather-grid"></div>
+        </div>
       </div>
     </section>
-
-
-
   </main>
 
   <footer>
@@ -55,36 +70,45 @@
     </div>
   </footer>
 
-  <script type="module" src="js/firebase-config.js"></script>
-  <script type="module" src="js/auth.js"></script>
   <script type="module">
-    import { logout } from './js/auth.js';
     import { auth } from './js/firebase-config.js';
+    import { updateNavVisibility } from './js/nav-control.js';
+    import { initializeWeatherCards } from './js/weather.js';
+    import { logout } from './js/auth.js';
 
-    const loginBtn = document.getElementById('login-btn');
-    const signupBtn = document.getElementById('signup-btn');
+    // Update nav immediately and on auth state changes
+    updateNavVisibility();
+    auth.onAuthStateChanged((user) => {
+      updateNavVisibility();
+    });
+
+    // Initialize weather cards
+    initializeWeatherCards();
+
+    // Update weather every 30 minutes
+    setInterval(initializeWeatherCards, 30 * 60 * 1000);
+
+    // Add event listeners for login and signup buttons
+    document.getElementById('login-btn').addEventListener('click', () => {
+      window.location.href = 'pages/login.html';
+    });
+
+    document.getElementById('signup-btn').addEventListener('click', () => {
+      window.location.href = 'pages/signup.html';
+    });
+
+    // Wire logout button (restricted - shown only when authenticated)
     const logoutBtn = document.getElementById('logout-btn');
-
-    loginBtn.addEventListener('click', () => {
-      window.location.href = "pages/login.html";
-    });
-
-    signupBtn.addEventListener('click', () => {
-      window.location.href = "pages/signup.html";
-    });
-
-    logoutBtn.addEventListener('click', async () => {
-      await logout();
-      logoutBtn.style.display = 'none';
-    });
-
-    auth.onAuthStateChanged(user => {
-      if (user) {
-        logoutBtn.style.display = '';
-      } else {
-        logoutBtn.style.display = 'none';
-      }
-    });
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          await logout();
+        } catch (err) {
+          console.error('Logout failed:', err);
+        }
+      });
+    }
   </script>
 </body>
 </html>
