@@ -4,16 +4,18 @@ A web-based workplace dashboard for managing chatbot modules, user profiles, aut
 
 ## Features
 
-- **User Authentication:** Sign up, log in, and log out with Firebase Auth
+- **User Authentication:** Sign up, log in, log out, and password reset with Firebase Auth
 - **Profile Management:** 
   - View and edit user profile information
   - Upload or change profile pictures
   - Customizable profile avatars with initials
-- **Module Control:** Toggle and view status of multiple chatbot modules in a responsive grid
 - **Chatbot Data:** Access and display chatbot-related data
 - **Admin Panel:** 
   - View and approve/reject account creation requests
   - Manage existing user accounts
+- **Attendance Tracking:** Track and manage employee attendance
+- **Payroll Management:** Handle employee payroll information
+- **Weather Information:** Display weather updates and forecasts
 - **Responsive Design:** Modern UI with gradient themes and interactive elements
 
 ## Folder Structure
@@ -22,22 +24,33 @@ A web-based workplace dashboard for managing chatbot modules, user profiles, aut
 javascript_website/
 ├── css/
 │   └── styles.css
-├── functions/
-│   └── index.js
 ├── js/
 │   ├── admin.js
+│   ├── attendance.js
 │   ├── auth.js
+│   ├── chatbot.js
 │   ├── firebase-config.js
-│   ├── modules.js
+│   ├── main.js
+│   ├── nav-control.js
+│   ├── node.js
+│   ├── payroll.js
 │   ├── profile.js
-│   └── chatbot.js
+│   ├── show-password.js
+│   └── weather.js
 ├── pages/
 │   ├── admin.html
 │   ├── chatbot.html
 │   ├── login.html
-│   ├── modules.html
 │   ├── profile.html
+│   ├── reset-password.html
 │   └── signup.html
+├── functions/
+│   └── index.js
+├── public/
+│   └── index.html
+├── firebase.json
+├── firestore.indexes.json
+├── firestore.rules
 └── index.html
 ```
 
@@ -176,4 +189,3 @@ MIT License
 ---
 
 **Made for Capstone Project 2025**
-
