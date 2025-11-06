@@ -1,13 +1,13 @@
-// profile.js
 import { auth, db } from './firebase-config.js';
 import { doc, getDoc, updateDoc } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
 import { signOut } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js';
 
+// Escape HTML characters
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 
-// Get initials from username/full name
+// Generate user initials
 function getInitials(name) {
   if (!name) return '?';
   const parts = name.trim().split(/\s+/);
@@ -19,7 +19,7 @@ function getInitials(name) {
   return parts[0][0].toUpperCase();
 }
 
-// Generate a consistent color based on initials
+// Generate avatar color
 function getAvatarColor(initials) {
   const colors = [
     'linear-gradient(135deg, #4f8cff 0%, #6ed6ff 100%)',  // blue (default)
@@ -29,8 +29,7 @@ function getAvatarColor(initials) {
     'linear-gradient(135deg, #ff8c4f 0%, #ffd66e 100%)'   // orange
   ];
   
-  // Generate consistent index based on initials
-  const index = initials.split('')
+    const index = initials.split('')
     .reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
   
   return colors[index];
@@ -72,18 +71,48 @@ export async function loadProfile(uid) {
 
     container.innerHTML = `
       <div class="profile-card">
-        <div class="profile-avatar" style="background: ${avatarColor}">
-          ${data.photoURL ? `<img src="${escapeHtml(data.photoURL)}" alt="${escapeHtml(username)}'s avatar">` : initials}
+        <div class="id-header">
+          <h2>Employee ID Card</h2>
+          <p>D' Mariners Inn Hotel</p>
         </div>
-        <div class="profile-details">
-          <div class="profile-row"><strong>Name:</strong> <span id="profile-username">${escapeHtml(username)}</span></div>
-          <div class="profile-row"><strong>Email:</strong> <span>${escapeHtml(email)}</span></div>
-          <div class="profile-row"><strong>Role:</strong> <span>${escapeHtml(role)}</span></div>
-          <div class="profile-actions">
-            <button id="edit-profile-btn" class="action-btn primary">Edit</button>
-            <button id="logout-btn-card" class="action-btn secondary">Logout</button>
+        
+        <div class="profile-avatar id-photo" style="background: ${avatarColor}">
+          ${data.photoURL ? `<img src="${escapeHtml(data.photoURL)}" alt="${escapeHtml(username)}'s photo">` : initials}
+        </div>
+
+        <div class="info-group">
+          <div class="info-label">Name:</div>
+          <h3 id="profile-username">${escapeHtml(username)}</h3>
+        </div>
+
+        <div class="id-info">
+          <div class="info-group">
+            <div class="info-label">Role:</div>
+            <div class="id-value">${escapeHtml(role)}</div>
+          </div>
+
+          <div class="info-group">
+            <div class="info-label">Employee ID</div>
+            <div class="employee-id-text">${escapeHtml(data.employeeId || 'Not assigned')}</div>
+          </div>
+
+          <!-- barcode removed per project request -->
+
+          <div class="info-group">
+            <div class="info-label">Joined:</div>
+            <div class="id-value">${formatTimestamp(data.createdAt || new Date())}</div>
           </div>
         </div>
+
+        <div class="profile-actions">
+          <button id="edit-profile-btn" class="action-btn primary">Edit Profile</button>
+          <button id="logout-btn-card" class="action-btn secondary">Logout</button>
+        </div>
+      </div>
+      
+      <div class="email-section">
+        <p class="email-label">Contact Email:</p>
+        <p class="email-value">${escapeHtml(email)}</p>
       </div>
     `;
 
@@ -103,18 +132,17 @@ export async function loadProfile(uid) {
         }
       });
     }
-
     if (editBtn) {
       editBtn.addEventListener('click', () => {
-        showEditModal({ 
+        openEditModal({
           username: data.username,
-          photoURL: data.photoURL 
+          photoURL: data.photoURL
         }, async (newName, newPhotoURL) => {
           try {
             const updates = {};
             if (newName) updates.username = newName;
             if (typeof newPhotoURL !== 'undefined') {
-              updates.photoURL = newPhotoURL;
+              updates.photoURL = newPhotoURL || null;
             }
 
             await updateDoc(ref, updates);
@@ -134,6 +162,7 @@ export async function loadProfile(uid) {
   }
 }
 
+// Attach profile event handlers
 function attachEventHandlers(data, ref) {
   // Attach logout handler
   const logoutBtnCard = document.getElementById('logout-btn-card');
@@ -156,15 +185,14 @@ function attachEventHandlers(data, ref) {
     if (editBtn) editBtn.style.display = 'none';
   } else {
     editBtn.addEventListener('click', () => {
-      showEditModal({ 
+      openEditModal({
         username: data.username,
-        photoURL: data.photoURL 
+        photoURL: data.photoURL
       }, async (newName, newPhotoURL) => {
         try {
           const updates = {};
           if (newName) updates.username = newName;
-          // Explicitly set photoURL to null when removed
-          updates.photoURL = newPhotoURL;
+          updates.photoURL = newPhotoURL || null;
 
           await updateDoc(ref, updates);
 
@@ -192,76 +220,91 @@ function attachEventHandlers(data, ref) {
   }
 }
 
-function showEditModal(currentData, onSave) {
-  const modal = document.createElement('div');
-  modal.innerHTML = `
-    <div class="profile-edit-backdrop"></div>
-    <div class="profile-edit-modal">
-      <form class="profile-edit-form">
-        <h3>Edit Profile</h3>
-        <label>
-          Name
-          <input type="text" id="edit-name" value="${escapeHtml(currentData.username || '')}" placeholder="Your name">
-        </label>
-        <div class="profile-photo-section">
-          <div class="current-photo">
-            ${currentData.photoURL ? `
-              <img src="${escapeHtml(currentData.photoURL)}" alt="Current profile picture" style="width:100px;height:100px;border-radius:50%;object-fit:cover;">
-              <button type="button" class="action-btn remove-photo" id="remove-photo">Remove Profile Picture</button>
-            ` : '<p>No profile picture set</p>'}
-          </div>
-          <label class="file-upload-btn" for="photo-url">
-            <span>Enter Image URL</span>
-            <input type="url" id="photo-url" value="${escapeHtml(currentData.photoURL || '')}" placeholder="Enter image URL">
-          </label>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="action-btn secondary" id="cancel-edit">Cancel</button>
-          <button type="submit" class="action-btn primary">Save Changes</button>
-        </div>
-      </form>
-    </div>
-  `;
-  document.body.appendChild(modal);
+function openEditModal(currentData, onSave) {
+  const root = document.getElementById('profile-edit-root');
+  if (!root) {
+    console.error('Edit modal root not found in DOM');
+    return;
+  }
 
-  const form = modal.querySelector('form');
+  // Show root and modal
+  root.style.display = 'block';
+  const modal = root.querySelector('.profile-edit-modal');
+  modal.removeAttribute('hidden');
+
+  // Get form and inputs; replace form to avoid duplicate listeners
+  const formOld = root.querySelector('#profile-edit-form');
+  const form = formOld.cloneNode(true);
+  form.id = 'profile-edit-form';
+  formOld.parentNode.replaceChild(form, formOld);
+
+  const nameInput = form.querySelector('#edit-name');
   const photoUrlInput = form.querySelector('#photo-url');
+  const currentPhotoArea = form.querySelector('#current-photo-area') || root.querySelector('#current-photo-area');
   const removePhotoBtn = form.querySelector('#remove-photo');
+  const cancelBtn = form.querySelector('#cancel-edit');
 
-  // Handle remove photo button
+  // Populate values
+  if (nameInput) nameInput.value = currentData.username || '';
+  if (photoUrlInput) photoUrlInput.value = currentData.photoURL || '';
+
+  // Populate current photo area
+  if (currentPhotoArea) {
+    if (currentData.photoURL) {
+      currentPhotoArea.innerHTML = `<img src="${escapeHtml(currentData.photoURL)}" alt="Current profile picture">`;
+      if (removePhotoBtn) removePhotoBtn.style.display = '';
+    } else {
+      currentPhotoArea.innerHTML = '<p id="no-photo-text">No profile picture set</p>';
+      if (removePhotoBtn) removePhotoBtn.style.display = 'none';
+    }
+  }
+
+  // Remove photo handler
   if (removePhotoBtn) {
     removePhotoBtn.addEventListener('click', () => {
-      photoUrlInput.value = ''; // Clear the URL input
-      const currentPhoto = modal.querySelector('.current-photo');
-      currentPhoto.innerHTML = '<p>No profile picture set</p>';
+      photoUrlInput.value = '';
+      if (currentPhotoArea) currentPhotoArea.innerHTML = '<p id="no-photo-text">No profile picture set</p>';
       removePhotoBtn.style.display = 'none';
+    });
+  }
+
+  // Cancel handler
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      modal.setAttribute('hidden', '');
+      root.style.display = 'none';
     });
   }
 
   form.onsubmit = async (e) => {
     e.preventDefault();
-    const newName = form['edit-name'].value.trim();
-    const newPhotoURL = form['photo-url'].value.trim();
-    
-    // Check if anything changed
-    if (newName === currentData.username && newPhotoURL === currentData.photoURL) {
-      modal.remove();
+    const newName = (form.querySelector('#edit-name') || {value: ''}).value.trim();
+    const newPhotoURL = (form.querySelector('#photo-url') || {value: ''}).value.trim();
+
+    if (newName === currentData.username && newPhotoURL === (currentData.photoURL || '')) {
+      modal.setAttribute('hidden', '');
+      root.style.display = 'none';
       return;
     }
 
-    // Add confirmation prompt
-    if (!confirm('Are you sure you want to save these changes?')) {
-      return;
-    }
+    if (!confirm('Are you sure you want to save these changes?')) return;
 
     try {
       await onSave(newName, newPhotoURL);
-      modal.remove();
+      modal.setAttribute('hidden', '');
+      root.style.display = 'none';
     } catch (err) {
       console.error('Save error:', err);
       alert('Error saving profile: ' + err.message);
     }
   };
 
-  modal.querySelector('#cancel-edit').onclick = () => modal.remove();
+  // Also allow clicking backdrop to close
+  const backdrop = root.querySelector('.profile-edit-backdrop');
+  if (backdrop) {
+    backdrop.onclick = () => {
+      modal.setAttribute('hidden', '');
+      root.style.display = 'none';
+    };
+  }
 }
