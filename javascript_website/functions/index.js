@@ -1,7 +1,47 @@
 import express from 'express';
 import admin from 'firebase-admin';
+import * as functions from 'firebase-functions';
 
 admin.initializeApp();
+
+// Create the deleteUser function
+export const deleteUser = functions.https.onRequest(async (req, res) => {
+  try {
+    // Verify the request is a POST
+    if (req.method !== 'POST') {
+      return res.status(405).send('Method not allowed');
+    }
+
+    // Get the authorization token
+    const idToken = req.headers.authorization?.split('Bearer ')[1];
+    if (!idToken) {
+      return res.status(401).send('Unauthorized');
+    }
+
+    // Verify the token and get the caller's info
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    
+    // Check if the caller is an admin
+    const callerDoc = await admin.firestore().doc(`users/${decodedToken.uid}`).get();
+    if (!callerDoc.exists || callerDoc.data().role !== 'admin') {
+      return res.status(403).send('Forbidden: Admin access required');
+    }
+
+    // Get the user ID to delete
+    const { uid } = req.body;
+    if (!uid) {
+      return res.status(400).send('Missing user ID');
+    }
+
+    // Delete the user from Firebase Auth
+    await admin.auth().deleteUser(uid);
+    
+    res.status(200).send({ message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    res.status(500).send({ error: error.message });
+  }
+});
 const db = admin.firestore();
 const app = express();
 app.use(express.json());
