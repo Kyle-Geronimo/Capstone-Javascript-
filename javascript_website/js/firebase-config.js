@@ -1,4 +1,4 @@
-// Modular Firebase config (browser ESM)
+// Firebase initialization
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js';
 import { getAuth } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js';
 import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
@@ -6,13 +6,13 @@ import { getAnalytics } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase
 import { getStorage } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-storage.js';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBYdtNZaDlhLd7m9sjhlXMQ_xMnMyDDWuQ",
-  authDomain: "capstone-a773d.firebaseapp.com",
-  projectId: "capstone-a773d",
-  storageBucket: "capstone-a773d.firebasestorage.app",
-  messagingSenderId: "190089180629",
-  appId: "1:190089180629:web:8dddd02f202d483c26795c",
-  measurementId: "G-YV905F3P88"
+  apiKey: "AIzaSyBUiQSMj8QbBzOAHgCWH--_N5rPXgQRkUo",
+  authDomain: "mariners-hotellink.firebaseapp.com",
+  projectId: "mariners-hotellink",
+  storageBucket: "mariners-hotellink.firebasestorage.app",
+  messagingSenderId: "396146858365",
+  appId: "1:396146858365:web:f3b00e40ee2a5ec4245414",
+  measurementId: "G-4LGVNG134E"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -25,9 +25,16 @@ export const db = getFirestore(app);
 // Initialize Storage
 export const storage = getStorage(app);
 
+// Get user's role from database
 export async function getUserRole(uid) {
   if (!uid) return null;
-  const ref = doc(db, 'users', uid);
-  const snap = await getDoc(ref);
-  return snap.exists() ? snap.data().role : null;
+  try {
+    const userDoc = await getDoc(doc(db, 'users', uid));
+    const role = userDoc.exists() ? userDoc.data().role : null;
+    console.log('User role:', role); // Debug log
+    return role;
+  } catch (err) {
+    console.error('Error getting user role:', err);
+    return null;
+  }
 }
