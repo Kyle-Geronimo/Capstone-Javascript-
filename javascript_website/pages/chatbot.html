@@ -5,25 +5,20 @@
   <title>HotelLink - Chatbot Data</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../css/styles.css">
-
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
   <header>
     <div class="container">
       <h1>HotelLink</h1>
       <nav>
-        <a href="../index.html" class="nav-btn">Home</a>
-        <a href="../pages/modules.html" class="nav-btn">Modules</a>
-        <a href="../pages/chatbot.html" class="nav-btn active">Chatbot Data</a>
-        <a href="../pages/admin.html" class="nav-btn">Admin</a>
-        <a href="../pages/profile.html" class="nav-btn">Profile</a>
+        <a href="../index.html" class="nav-btn restricted">Home</a>
+        <a href="chatbot.html" class="nav-btn restricted">Chatbot Data</a>
+        <a href="admin.html" class="nav-btn restricted admin-only">Admin</a>
+        <a href="profile.html" class="nav-btn restricted">Profile</a>
       </nav>
     </div>
   </header>
+
   <main>
     <section class="form-container chatbot-data-container">
       <h2>Chatbot Data</h2>
@@ -33,21 +28,34 @@
 
   <footer>
     <div class="container">
-      <p>&copy; 2025 D’ Mariners Inn Hotel. All rights reserved.</p>
+      <p>&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>
     </div>
   </footer>
 
-  <script type="module" src="../js/firebase-config.js"></script>
-  <script type="module" src="../js/chatbot.js"></script>
   <script type="module">
-    import { loadChatbotData } from '../js/chatbot.js';
     import { auth } from '../js/firebase-config.js';
+    import { updateNavVisibility } from '../js/nav-control.js';
+    import { loadChatbotData } from '../js/chatbot.js';
 
-    auth.onAuthStateChanged(user => {
-      if (user) {
-        document.getElementById('logout-btn').style.display = '';
-        loadChatbotData();
+    // Check if user is authenticated
+    auth.onAuthStateChanged((user) => {
+      updateNavVisibility();
+      
+      const container = document.getElementById('chatbot-data');
+      if (!user) {
+        // If not authenticated, show login message
+        if (container) {
+          container.innerHTML = '<div class="auth-message"><p>Please log in to view hotel information.</p></div>';
+        }
+        // Redirect to login page after a short delay
+        setTimeout(() => {
+          window.location.href = 'login.html';
+        }, 2000);
+        return;
       }
+
+      // If authenticated, load the hotel data
+      loadChatbotData();
     });
   </script>
 </body>
