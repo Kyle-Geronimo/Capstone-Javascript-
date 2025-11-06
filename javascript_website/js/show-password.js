@@ -1,5 +1,4 @@
-// Add a small module to toggle show/hide for password inputs.
-// It looks for buttons with class "toggle-password" and a data-target pointing to the input id.
+// Toggle password visibility
 export function initShowPassword() {
   document.querySelectorAll('.toggle-password').forEach(btn => {
     const targetId = btn.dataset.target;
