@@ -5,6 +5,8 @@
   <title>HotelLink - Profile</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../css/styles.css">
+  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+  <script type="module" src="../js/auth.js"></script>
 </head>
 <body>
   <header>
@@ -12,10 +14,9 @@
       <h1>HotelLink</h1>
       <nav>
         <a href="../index.html" class="nav-btn">Home</a>
-        <a href="../pages/modules.html" class="nav-btn">Modules</a>
-        <a href="../pages/chatbot.html" class="nav-btn">Chatbot Data</a>
-        <a href="../pages/admin.html" class="nav-btn">Admin</a>
-        <a href="../pages/profile.html" class="nav-btn active">Profile</a>
+        <a href="chatbot.html" class="nav-btn restricted">Chatbot Data</a>
+        <a href="admin.html" class="nav-btn restricted admin-only">Admin</a>
+        <a href="profile.html" class="nav-btn restricted">Profile</a>
       </nav>
     </div>
   </header>
@@ -34,29 +35,76 @@
     </div>
   </footer>
 
-  <!-- Import modules -->
-  <script type="module" src="../js/firebase-config.js"></script>
   <script type="module">
-    import { auth } from '../js/firebase-config.js';
+    import { auth, getUserRole } from '../js/firebase-config.js';
     import { loadProfile } from '../js/profile.js';
+    import { updateNavVisibility } from '../js/nav-control.js';
 
     const container = document.getElementById('profile-info');
     container.innerHTML = '<div class="profile-card"><em>Loading profile...</em></div>';
     
-    auth.onAuthStateChanged(user => {
-        console.log('Auth state changed:', user?.uid);
-        
-        if (user) {
-            console.log('Loading profile for:', user.uid);
-            loadProfile(user.uid).catch(err => {
-                console.error('Profile load error:', err);
-                container.innerHTML = `<div class="profile-card"><em>Error loading profile: ${err.message}</em></div>`;
-            });
-        } else {
-            console.log('No user logged in, redirecting');
-            window.location.href = '../index.html';
-        }
+    auth.onAuthStateChanged(async user => {
+      if (!user) {
+        window.location.href = '../pages/login.html';
+        return;
+      }
+
+      // Get the profile ID from URL if any
+      const urlParams = new URLSearchParams(window.location.search);
+      const profileId = urlParams.get('uid');
+
+      // Only allow viewing own profile unless admin
+      const role = await getUserRole(user.uid);
+      if (profileId && profileId !== user.uid && role !== 'admin') {
+        window.location.href = '../index.html';
+        return;
+      }
+
+      // Load the appropriate profile
+      try {
+        await loadProfile(profileId || user.uid);
+        await updateNavVisibility();
+      } catch (err) {
+        console.error('Profile load error:', err);
+        container.innerHTML = `<div class="profile-card"><em>Error loading profile: ${err.message}</em></div>`;
+      }
+    });
+
+    // Update nav immediately and on auth state changes
+    updateNavVisibility();
+    auth.onAuthStateChanged(() => {
+      updateNavVisibility();
     });
   </script>
+
+  <!-- Static Edit Profile Modal (hidden by default) -->
+  <div id="profile-edit-root" style="display:none;">
+    <div class="profile-edit-backdrop" id="profile-edit-backdrop" aria-hidden="true"></div>
+    <div class="profile-edit-modal" role="dialog" aria-modal="true" aria-labelledby="profile-edit-title" hidden>
+      <form class="profile-edit-form" id="profile-edit-form">
+        <h3 id="profile-edit-title">Edit Profile</h3>
+        <div class="form-group">
+          <label class="form-label" for="edit-name">Name</label>
+          <input class="form-control" type="text" id="edit-name" name="edit-name" placeholder="Your name">
+        </div>
+
+        <div class="profile-photo-section">
+          <div class="current-photo" id="current-photo-area">
+            <p id="no-photo-text">No profile picture set</p>
+          </div>
+          <label class="file-upload-btn" for="photo-url">
+            <span>Enter Image URL</span>
+            <input class="form-control" type="url" id="photo-url" name="photo-url" placeholder="Enter image URL">
+          </label>
+          <button type="button" class="action-btn remove-photo" id="remove-photo" style="display:none;">Remove Profile Picture</button>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="action-btn secondary" id="cancel-edit">Cancel</button>
+          <button type="submit" class="action-btn primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </body>
 </html>
