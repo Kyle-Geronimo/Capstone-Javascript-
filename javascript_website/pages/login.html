@@ -4,11 +4,7 @@
   <meta charset="UTF-8">
   <title>HotelLink - Login</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="../css/styles.css">
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <link rel="stylesheet" href="../css/styles.css">
 </head>
 <body>
   <header>
@@ -16,6 +12,7 @@
       <h1>HotelLink</h1>
       <nav>
         <a href="../index.html" class="nav-btn">Home</a>
+        <a href="signup.html" class="nav-btn">Sign Up</a>
       </nav>
     </div>
   </header>
@@ -27,12 +24,14 @@
         <input id="login-email" type="email" placeholder="Email">
         <div class="password-wrap">
           <input id="login-password" type="password" placeholder="Password">
-          <button type="button" class="toggle-password" data-target="login-password">Show</button>
+          <button type="button" class="toggle-password action-btn secondary" data-target="login-password">Show</button>
         </div>
-        <button id="login-btn" class="action-btn">Login</button>
-        <div class="form-links">
-          <p>Don't have an account? <a href="signup.html">Sign up</a></p>
-          <p><a href="reset-password.html" class="forgot-link">Forgot Password?</a></p>
+        <div class="button-container center-button">
+          <button id="login-btn" class="action-btn primary">Login</button>
+        </div>
+        <div class="form-links text-center">
+          <p>Don't have an account? <a href="signup.html" class="link-btn">Sign up</a></p>
+          <p><a href="reset-password.html" class="link-btn">Forgot Password?</a></p>
         </div>
       </div>
     </section>
@@ -44,27 +43,29 @@
     </div>
   </footer>
 
-  <script type="module" src="../js/firebase-config.js"></script>
-  <script type="module" src="../js/auth.js"></script>
-  <script type="module" src="../js/show-password.js"></script>
   <script type="module">
-  import { login } from '../js/auth.js';
-  import { auth } from '../js/firebase-config.js';
+    import { auth } from '../js/firebase-config.js';
+    import { login } from '../js/auth.js';
 
-  document.getElementById('login-btn').addEventListener('click', async () => {
-    const email = document.getElementById('login-email').value;
-    const password = document.getElementById('login-password').value;
-    try {
-      await login(email, password);
-      window.location.href = '../index.html';
-    } catch (err) {
-      alert(err.message);
-    }
-  });
+    // Handle login button click
+    document.getElementById('login-btn').addEventListener('click', async () => {
+      const email = document.getElementById('login-email').value;
+      const password = document.getElementById('login-password').value;
+      try {
+        await login(email, password);
+        window.location.href = '../index.html';
+      } catch (err) {
+        alert(err.message);
+      }
+    });
 
-  auth.onAuthStateChanged(user => {
-    if (user) window.location.href = '../index.html';
-  });
-</script>
+    // Redirect if already logged in
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        window.location.href = '../index.html';
+      }
+      updateNavVisibility();
+    });
+  </script>
 </body>
 </html>
