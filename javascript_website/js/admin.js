@@ -1,228 +1,136 @@
-// admin.js (MODULAR - replace existing file)
-import { auth, db } from './firebase-config.js';
-import {
-  collection, query, where, onSnapshot,
-  updateDoc, doc, getDocs, getDoc, setDoc, deleteDoc,
-  serverTimestamp  // add this import
-} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
-import { 
-  createUserWithEmailAndPassword, 
-  getIdToken, 
-  updateEmail, deleteUser 
-} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HotelLink - Admin</title>
+  <link rel="stylesheet" href="../css/styles.css">
 
-// quick sanity log if SDK import didn't bind deleteDoc
-if (typeof deleteDoc === 'undefined') {
-  console.warn('firebase-firestore deleteDoc is not defined — check the import URL and network.');
-}
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore-compat.js"></script>
+  <script type="module" src="../js/auth.js"></script>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>HotelLink</h1>
+      <nav>
+        <a href="../index.html" class="nav-btn">Home</a>
+        <a href="chatbot.html" class="nav-btn restricted">Chatbot Data</a>
+        <a href="admin.html" class="nav-btn restricted admin-only">Admin</a>
+        <a href="profile.html" class="nav-btn restricted">Profile</a>
+      </nav>
+    </div>
+  </header>
 
-export function watchRequestsRealtime() {
-  const container = document.getElementById('requests');
-  if (!container) return;
-  // Remove where('status', '==', 'pending') to show all requests
-  const q = collection(db, 'accountRequests');
-  return onSnapshot(q, snapshot => {
-    if (snapshot.empty) {
-      container.innerHTML = '<em>No requests.</em>';
-      return;
-    }
-    container.innerHTML = snapshot.docs.map(d => {
-      const docData = d.data();
-      return `
-        <div class="request-item" data-id="${d.id}">
-          <div><strong>${escapeHtml(docData.username || '—')}</strong> (${escapeHtml(docData.email || '—')})</div>
-          <div class="request-meta">${escapeHtml(docData.note || '')}</div>
-          <div class="request-actions">
-            <button class="approve-btn action-btn">Approve</button>
-            <button class="reject-btn action-btn">Reject</button>
-          </div>
-        </div>
-      `;
-    }).join('');
-    container.querySelectorAll('.approve-btn').forEach(b => b.addEventListener('click', onApprove));
-    container.querySelectorAll('.reject-btn').forEach(b => b.addEventListener('click', onReject));
-  }, err => {
-    container.innerHTML = `<em>Error: ${escapeHtml(err.message)}</em>`;
-  });
-}
+  <main>
+    <section class="form-container chatbot-data-container admin-dashboard">
+      <h2>Admin Dashboard</h2>
 
-export async function loadAccounts() {
-  const container = document.getElementById('accounts');
-  if (!container) return;
-  try {
-    const snap = await getDocs(collection(db, 'users'));
-    if (snap.empty) {
-      container.innerHTML = '<em>No accounts found.</em>';
-      return;
-    }
-    const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    // Simple email sort instead of role-based
-    users.sort((a, b) => (a.email || '').localeCompare(b.email || ''));
-
-    container.innerHTML = users.map(u => `
-      <div class="user-item" data-id="${u.id}">
-        <div class="user-main">
-          <div class="user-name">${escapeHtml(u.username || u.email || '—')}</div>
-          <div class="user-email">${escapeHtml(u.email || '—')}</div>
-        </div>
-        <div class="user-meta">
-          <span class="user-role-badge">${escapeHtml(u.role || 'employee')}</span>
-          <div class="user-actions">
-            <button class="edit-btn action-btn">Edit</button>
-            <button class="delete-btn action-btn">Delete</button>
+      <!-- Account Requests Section -->
+      <div class="admin-section">
+        <h3>Account Requests</h3>
+        <div class="requests-panel">
+          <div id="requests" class="request-list">
+            <em>Loading requests…</em>
           </div>
         </div>
       </div>
-    `).join('');
 
-    container.querySelectorAll('.edit-btn').forEach(b => b.addEventListener('click', onEditUser));
-    container.querySelectorAll('.delete-btn').forEach(b => b.addEventListener('click', onDeleteUser));
-  } catch (err) {
-    container.innerHTML = `<em>Error loading accounts: ${escapeHtml(err.message)}</em>`;
-  }
-}
+      <!-- User Management Section -->
+      <div class="admin-section">
+        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h3>User Management</h3>
+          <a href="archives.html" class="action-btn" style="text-decoration: none;">Archives</a>
+        </div>
+        <div class="accounts-panel">
+          <div id="accounts" class="accounts-list">
+            <em>Loading accounts…</em>
+          </div>
+        </div>
+      </div>
 
-async function onApprove(e) {
-  const id = e.target.closest('[data-id]').dataset.id;
-  try {
-    // Get request data
-    const reqRef = doc(db, 'accountRequests', id);
-    const reqSnap = await getDoc(reqRef);
-    if (!reqSnap.exists()) { alert('Request not found'); return; }
-    const reqData = reqSnap.data();
+      <!-- Payroll Management Section -->
+      <div class="admin-section">
+        <h3>Payroll Management</h3>
+        <div class="filters">
+            <h3 style="color: #1f4ea6; margin-bottom: 1rem;">Pay Period Selection</h3>
+              <div class="form-group flex gap-3 mb-3">
+                <div class="flex-1">
+                  <label for="monthSelect" class="form-label">Month</label>
+                  <select id="monthSelect" class="form-control"></select>
+                </div>
+                <div class="flex-1">
+                  <label for="periodSelect" class="form-label">Period</label>
+                  <select id="periodSelect" class="form-control">
+                    <option value="1-15">1 - 15</option>
+                    <option value="16-end">16 - end</option>
+                  </select>
+                </div>
+              </div>
+              <div class="button-group" style="margin: 1.5rem 0; padding: 0 1rem;">
+                <button id="loadFromFirestore" class="action-btn primary">Load Employees & DTR</button>
+                <button id="computePayroll" class="action-btn primary">Compute Payroll</button>
+                <button id="savePayroll" class="action-btn primary">Save Payroll</button>
+                <button id="exportCsv" class="action-btn secondary">Export CSV</button>
+              </div>
+            </div>
 
-    // Create Auth user
-    const userCred = await createUserWithEmailAndPassword(auth, reqData.email, reqData.password);
-    
-    // Create users document
-    await setDoc(doc(db, 'users', userCred.user.uid), {
-      email: reqData.email,
-      username: reqData.username,
-      role: reqData.role || 'employee',
-      createdAt: new Date()
-    });
+            <div id="resultsArea" class="table-responsive">
+              <table id="payrollTable" class="data-table">
+                <thead>
+                  <tr>
+                    <th style="width: 40px;">#</th>
+                    <th style="width: 200px;">Name</th>
+                    <th style="width: 80px;">Rate</th>
+                    <th style="width: 60px;">Days</th>
+                    <th style="width: 100px;">Basic</th>
+                    <th style="width: 80px;">Night Hrs</th>
+                    <th style="width: 100px;">Night Amount</th>
+                    <th style="width: 80px;">OT Hrs</th>
+                    <th style="width: 100px;">OT Amount</th>
+                    <th style="width: 80px;">Reg Hol Hrs</th>
+                    <th style="width: 100px;">Reg Hol Amount</th>
+                    <th style="width: 100px;">Gross</th>
+                    <th style="width: 100px;">SSS (Emp)</th>
+                    <th style="width: 100px;">SSS (Er)</th>
+                    <th style="width: 120px;">Other Deductions</th>
+                    <th style="width: 100px;">Net</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
 
-    // Delete the request
-    await deleteDoc(reqRef);
-    
-    // UI will update automatically via realtime listener
-  } catch (err) {
-    console.error('Approval failed:', err);
-    alert('Error approving request: ' + err.message);
-  }
-}
+      </section>
+    </div>
+  </main>
 
-async function onReject(e) {
-  const id = e.target.closest('[data-id]').dataset.id;
-  try {
-    const reqRef = doc(db, 'accountRequests', id);
-    // Delete the request document instead of updating status
-    await deleteDoc(reqRef);
-    // UI will update automatically via realtime listener
-  } catch (err) {
-    console.error('Rejection failed:', err);
-    alert('Error rejecting request: ' + err.message);
-  }
-}
-
-async function onEditUser(e) {
-  const id = e.target.closest('[data-id]').dataset.id;
-  try {
-    // Get current user data
-    const userRef = doc(db, 'users', id);
-    const docSnap = await getDoc(userRef);
-    if (!docSnap.exists()) { 
-      alert('User not found'); 
-      return; 
-    }
-    const data = docSnap.data();
-    
-    // Get new username only
-    const newUsername = prompt('Edit username:', data.username || '') || data.username;
-    
-    // Update Firestore document with just username
-    await updateDoc(userRef, { 
-      username: newUsername
-    });
-    
-    await loadAccounts();
-  } catch (err) {
-    console.error('Edit failed:', err);
-    alert('Error editing user: ' + err.message);
-  }
-}
-
-async function onDeleteUser(e) {
-  const id = e.target.closest('[data-id]').dataset.id;
-  if (!confirm('Delete this account? This cannot be undone.')) return;
+  <footer>
+    <div class="container">
+      <p>&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>
+    </div>
+  </footer>
   
-  try {
-    const response = await fetch('http://localhost:3000/api/deleteUser', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ uid: id })
+  <script type="module">
+    import { auth } from '../js/firebase-config.js';
+    import { updateNavVisibility } from '../js/nav-control.js';
+    import { watchRequestsRealtime, loadAccounts } from '../js/admin.js';
+
+    // Update nav immediately and on auth state changes
+    updateNavVisibility();
+    
+    auth.onAuthStateChanged((user) => {
+      updateNavVisibility();
+      if (user) {
+        // Initialize account management features
+        watchRequestsRealtime(); // Start watching for account requests
+        loadAccounts(); // Load existing accounts
+      }
     });
-    
-    if (!response.ok) {
-      throw new Error('Server returned ' + response.status);
-    }
-    
-    await loadAccounts();
-  } catch (err) {
-    console.error('Delete failed:', err);
-    alert('Error deleting user: ' + err.message);
-  }
-}
-
-function escapeHtml(s) {
-  return String(s || '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-}
-
-export function watchAccountsRealtime() {
-  const container = document.getElementById('accounts');
-  if (!container) return;
-  const usersCol = collection(db, 'users');
-  return onSnapshot(usersCol, snap => {
-    const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    users.sort((a,b)=> (a.role===b.role)?(a.email||'').localeCompare(b.email||''):(a.role==='admin'?-1:1));
-    container.innerHTML = users.map(u=>`
-      <div class="user-item" data-id="${u.id}">
-        <div class="user-main">
-          <div class="user-name">${escapeHtml(u.username || u.email || '—')}</div>
-          <div class="user-email">${escapeHtml(u.email || '—')}</div>
-        </div>
-        <div class="user-meta">
-          <span class="user-role-badge">${escapeHtml(u.role || 'employee')}</span>
-          <div class="user-actions">
-            <button class="edit-btn action-btn">Edit</button>
-            <button class="delete-btn action-btn">Delete</button>
-          </div>
-        </div>
-      </div>
-    `).join('');
-
-    // attach handlers to the newly-rendered buttons
-    container.querySelectorAll('.edit-btn').forEach(b => b.addEventListener('click', onEditUser));
-    container.querySelectorAll('.delete-btn').forEach(b => b.addEventListener('click', onDeleteUser));
-  }, err => container.innerHTML = `<em>Error: ${escapeHtml(err.message)}</em>`);
-}
-
-window.addEventListener('DOMContentLoaded', () => {
-  watchRequestsRealtime();
-  watchAccountsRealtime();
-});
-
-// Also update Firestore rules to allow all authenticated users to perform actions
-// In Firebase Console → Firestore → Rules:
-/*
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
-    }
-  }
-}
-*/
+  </script>
+</body>
+</html>
