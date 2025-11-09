@@ -45,11 +45,7 @@ html, body {
     margin-bottom: 0.25rem;
 }
 
-.employee-id-text {
-    color: #1f4ea6;
-    font-size: 0.9rem;
-    margin-bottom: 0.25rem;
-}
+/* Employee ID styles removed */
 
 .user-meta {
     display: flex;
@@ -168,12 +164,16 @@ html, body {
 
 .toggle-password.action-btn.secondary {
   position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
+  right: 0;
+  top: 0;
+  height: 100%;
   margin: 0;
-  padding: 4px 12px;
+  padding: 0 12px;
   font-size: 0.85rem;
+  border-radius: 0 8px 8px 0;
+  border: 1px solid #ddd;
+  border-left: none;
+  background: transparent;
 }
 
 .hotel-name {
@@ -484,6 +484,209 @@ nav {
 #payrollTable.data-table th:nth-child(3) { min-width: 100px; } /* Rate */
 #payrollTable.data-table th:nth-child(4) { min-width: 80px; } /* Days */
 #payrollTable.data-table th[style*="width"] { width: auto !important; } /* Override inline styles */
+
+/* Payroll editable styles */
+.editable-input {
+    border: 1px solid #4f8cff;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 14px;
+    background: white;
+}
+
+.editable-input:focus {
+    outline: none;
+    border-color: #6ed6ff;
+    box-shadow: 0 0 0 2px rgba(79,140,255,0.2);
+}
+
+/* Modal styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal.show {
+    display: flex;
+}
+
+.modal-content {
+    background: white;
+    padding: 2rem;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    position: relative;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.modal h2 {
+    margin-top: 0;
+    color: #1f4ea6;
+    font-size: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.modal .form-group {
+    margin-bottom: 1rem;
+}
+
+.modal .form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: #444;
+}
+
+.modal .form-group input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.modal .form-group input:focus {
+    outline: none;
+    border-color: #4f8cff;
+    box-shadow: 0 0 0 2px rgba(79,140,255,0.1);
+}
+
+.modal .button-group {
+    margin-top: 1.5rem;
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+}
+
+/* Animation for modals */
+.modal {
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+}
+
+.modal.show {
+    opacity: 1;
+}
+
+.modal .modal-content {
+    transform: translateY(-20px);
+    transition: transform 0.3s ease-in-out;
+}
+
+.modal.show .modal-content {
+    transform: translateY(0);
+}
+
+/* Prevent body scrolling when modal is open */
+body.modal-open {
+    overflow: hidden;
+}
+
+.modal .close-btn {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: #666;
+    cursor: pointer;
+    padding: 0.25rem;
+    line-height: 1;
+    border-radius: 50%;
+}
+
+.modal .close-btn:hover {
+    background: #f5f5f5;
+    color: #333;
+}
+
+
+/* Modal styles */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: white;
+    margin: 10% auto;
+    padding: 20px;
+    width: 80%;
+    max-width: 500px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: #4f8cff;
+    box-shadow: 0 0 0 2px rgba(79,140,255,0.1);
+}
+
+/* Style for manually edited cells */
+.manually-edited {
+    position: relative;
+}
+
+.manually-edited::after {
+    content: '*';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    color: #ff4f8c;
+    font-weight: bold;
+}
+
+#saveChanges, #cancelChanges {
+    margin-left: 8px;
+}
+
+.data-table tbody tr td.editable {
+    position: relative;
+}
+
+.data-table tbody tr td.editable::after {
+    content: '✎';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 12px;
+    color: #4f8cff;
+    opacity: 0.5;
+}
 
 /* Make sure flex elements inside sections don't squish */
 .accounts-panel,
@@ -1047,29 +1250,35 @@ button[id*="check-out"] {
 .password-wrap {
   position: relative;
   width: 100%;
+  display: block;
+  background: #fff;
+  border-radius: 8px;
 }
 
 .password-wrap input {
-  padding-right: 60px !important; /* Make room for the button */
+  width: 100%;
+  margin: 0;
+  padding-right: 70px;
+  border-radius: 8px;
 }
 
 .password-wrap .toggle-password {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
+  height: 100%;
+  margin: 0;
+  padding: 0 16px;
   background: transparent;
   color: #4f8cff;
-  border: none;
-  padding: 8px;
+  border: 1px solid #ddd;
+  border-left: none;
+  border-radius: 0 4px 4px 0;
   font-size: 0.9rem;
   cursor: pointer;
-  transition: color 0.2s;
+  white-space: nowrap;
 }
 
 .password-wrap .toggle-password:hover {
   color: #6ed6ff;
-  transform: translateY(-50%) scale(1.05);
+  background-color: rgba(79,140,255,0.05);
 }
 
 /* Remove the previous toggle-password styles */
@@ -1353,13 +1562,35 @@ button[id*="check-out"] {
 }
 
 .weather-card {
-  background: linear-gradient(180deg, #fff 0%, #f8faff 100%);
+  background-color: rgba(255, 255, 255, 0.8);  /* Adjust this value between 0 and 1 */
+  background-blend-mode: overlay;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
   border-radius: 16px;
   padding: 24px;
   box-shadow: 0 4px 16px rgba(79,140,255,0.1);
   border: 1px solid rgba(79,140,255,0.1);
   text-align: center;
   transition: transform 0.2s ease;
+  position: relative;
+  z-index: 1;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.weather-card[data-hotel="D'Mariners Inn Hotel"] {
+  background-image: url('../image/logo/DMariners%20Inn%20Hotel.jpg');
+}
+
+.weather-card[data-hotel="Wennrod Hotel"] {
+  background-image: url('../image/logo/Wennrod%20Hotel.jpg');
+}
+
+.weather-card[data-hotel="Bicotels Hotel"] {
+  background-image: url('../image/logo/Bicotels%20Hotel.jpg');
 }
 
 .weather-card:hover {
@@ -1894,3 +2125,228 @@ button[id*="check-out"] {
   gap: 8px;
 }
 
+/* Profile Layout Styles */
+.profile-layout {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 2rem !important;
+    padding: 2rem !important;
+    max-width: 1400px !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 6px 28px rgba(79,140,255,0.06);
+}
+
+.profile-section, .payroll-section {
+    flex: 1;
+    min-width: 0;
+    max-width: 50%;
+}
+
+#profile-info {
+    margin-bottom: 0 !important;
+}
+
+.profile-card {
+    height: 100%;
+    margin: 0 !important;
+    display: flex;
+    flex-direction: column;
+}
+
+.email-section {
+    margin-top: 1rem;
+}
+
+.profile-layout > div {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Payroll Section Styles */
+#payroll-info .profile-card {
+    height: 100%;
+    margin: 0;
+    padding: 1.5rem;
+}
+
+#payroll-info .data-table {
+    width: 100%;
+    min-width: 0;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+}
+
+#payroll-info .data-table td {
+    padding: 0.5rem;
+    border-bottom: 1px solid #eee;
+}
+
+#payroll-info .data-table td:first-child {
+    font-weight: 500;
+    color: #666;
+}
+
+#payroll-info .data-table td:last-child {
+    text-align: right;
+}
+
+.payroll-filters {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.payroll-filters .form-group {
+    flex: 1;
+    min-width: 150px;
+}
+
+.payroll-summary h3 {
+    margin: 1.5rem 0 1rem;
+    color: #1f4ea6;
+    font-size: 1.1rem;
+}
+
+#payroll-info select.form-control {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fff;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+    .profile-layout {
+        flex-direction: column;
+    }
+    
+    #profile-info,
+    #payroll-info {
+        width: 100%;
+    }
+}
+
+/* Archive Details Modal Styles */
+.archive-details-modal {
+    max-width: 700px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.archive-details h4 {
+    margin: 1.5rem 0 0.5rem;
+    color: #333;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 0.5rem;
+}
+
+.details-section {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 4px;
+    margin: 0.5rem 0;
+}
+
+.details-section.scrollable {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+}
+
+.record-item {
+    padding: 0.5rem;
+    border-bottom: 1px solid #eee;
+}
+
+.record-item:last-child {
+    border-bottom: none;
+}
+
+.record-item p {
+    margin: 0.25rem 0;
+}
+
+/* Chatbot and Admin page styles */
+body.chatbot-page {
+    background: #f7f7f7;
+    min-height: 100vh;
+}
+
+.chatbot-data-container {
+    padding: 20px;
+    margin: 20px auto;
+    max-width: 1200px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.auth-message {
+    text-align: center;
+    padding: 40px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.button-group {
+    margin: 1.5rem 0;
+    padding: 0 1rem;
+}
+
+h3.period-header {
+    color: #1f4ea6;
+    margin-bottom: 1rem;
+}
+
+/* Table column widths */
+.payroll-table th.col-number { width: 40px; }
+.payroll-table th.col-name { width: 200px; }
+.payroll-table th.col-rate { width: 80px; }
+.payroll-table th.col-days { width: 60px; }
+.payroll-table th.col-basic { width: 100px; }
+.payroll-table th.col-night-hrs { width: 80px; }
+.payroll-table th.col-night-amount { width: 100px; }
+.payroll-table th.col-ot-hrs { width: 80px; }
+.payroll-table th.col-ot-amount { width: 100px; }
+.payroll-table th.col-reg-hol-hrs { width: 80px; }
+.payroll-table th.col-reg-hol-amount { width: 100px; }
+.payroll-table th.col-gross { width: 100px; }
+.payroll-table th.col-sss-emp { width: 100px; }
+.payroll-table th.col-sss-er { width: 100px; }
+.payroll-table th.col-philhealth { width: 100px; }
+.payroll-table th.col-pagibig { width: 100px; }
+.payroll-table th.col-other-deductions { width: 120px; }
+.payroll-table th.col-net { width: 100px; }
+
+/* Button group spacing */
+.button-group.with-margin {
+    margin-bottom: 1rem;
+}
+
+/* Hidden elements */
+.hidden {
+    display: none;
+}
+
+/* Profile styles */
+#netPay {
+    font-weight: bold;
+    color: #1f4ea6;
+}
+
+#profile-edit-root.hidden {
+    display: none;
+}
