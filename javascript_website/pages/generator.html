@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Generate QR — HRIS</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family:Inter, system-ui, Arial;margin:18px}
+    header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    h1{margin:0;font-size:20px}
+    .muted{color:#666;font-size:13px}
+    form{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+    input, button, select{padding:8px;border:1px solid #ddd;border-radius:6px}
+    button.primary{background:#2563eb;color:#fff;border:none}
+    #qrPreview{margin-top:12px}
+    img.qr{width:200px;height:200px;border:1px solid #eee;padding:8px;background:#fff}
+    .small{font-size:13px}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Generate Employee QR</h1>
+      <div class="muted">Create an employee and download/print their QR code</div>
+    </div>
+    <div>
+      <a class="small" href="/pages/admin.html">Admin</a> &nbsp;|&nbsp;
+      <a class="small" href="/pages/payroll.html">Payroll</a>
+    </div>
+  </header>
+
+  <form id="createForm">
+    <input id="name" placeholder="Employee full name" required style="width:260px" />
+    <input id="role" placeholder="Role (optional)" style="width:220px" />
+    <input id="rate" placeholder="Rate (₱ / hr) optional" type="number" step="0.01" style="width:160px" />
+    <button type="submit" class="primary">Create & Generate QR</button>
+  </form>
+
+  <div id="resultArea" style="display:none">
+    <h3>Employee created</h3>
+    <div id="info"></div>
+    <div id="qrPreview"></div>
+    <div style="margin-top:8px;">
+      <button id="downloadBtn">Download PNG</button>
+      <button id="printBtn">Print</button>
+    </div>
+  </div>
+
+  <div id="status" class="muted"></div>
+
+<script>
+/*
+Generator page (patched)
+- Uses res.text() fallback to show raw server response if it's not JSON
+*/
+
+const form = document.getElementById('createForm');
+const resultArea = document.getElementById('resultArea');
+const info = document.getElementById('info');
+const qrPreview = document.getElementById('qrPreview');
+const status = document.getElementById('status');
+const downloadBtn = document.getElementById('downloadBtn');
+const printBtn = document.getElementById('printBtn');
+
+function setStatus(msg, ok=true){ status.textContent = msg; status.style.color = ok? '#064e3b' : '#b91c1c'; }
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('name').value.trim();
+  const role = document.getElementById('role').value.trim();
+  const rateVal = document.getElementById('rate').value;
+  if (!name) { alert('Enter name'); return; }
+  setStatus('Creating employee...');
+  try {
+    const res = await fetch('/api/employee', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name, role, rate: rateVal })
+    });
+
+    const text = await res.text();
+    try {
+      const j = JSON.parse(text);
+      if (j.error) {
+        setStatus('Server error: ' + j.error, false);
+        console.error('/api/employee returned error JSON:', j);
+        return;
+      }
+      // show info & qr
+      resultArea.style.display = 'block';
+      info.innerHTML = `<div><strong>${j.name}</strong> <span class="muted">${j.id}</span></div><div class="muted">Role: ${role||'—'}</div>`;
+      qrPreview.innerHTML = `<img class="qr" id="qrImg" src="${j.qrDataURI}" alt="QR for ${j.name}" />`;
+      setStatus('Employee created. Right-click QR to save, or use Download button.');
+      // store current data for download
+      window.__lastQR = { id: j.id, name: j.name, dataURI: j.qrDataURI };
+    } catch (ex) {
+      console.error('Non-JSON response for /api/employee:', text);
+      alert('Server returned a non-JSON response. See console for details.');
+      setStatus('Network error: non-JSON response (see console)', false);
+    }
+  } catch (err) {
+    setStatus('Network error: ' + err, false);
+  }
+});
+
+downloadBtn.addEventListener('click', () => {
+  const qr = window.__lastQR;
+  if (!qr) return alert('Generate first');
+  const a = document.createElement('a');
+  a.href = qr.dataURI;
+  a.download = `${qr.id}.png`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+});
+
+printBtn.addEventListener('click', () => {
+  const qr = window.__lastQR;
+  if (!qr) return alert('Generate first');
+  const w = window.open('', '_blank');
+  w.document.write('<html><head><title>Print QR</title></head><body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;">');
+  w.document.write(`<div style="text-align:center"><h3>${qr.name}</h3><img src="${qr.dataURI}" style="width:300px;height:300px"/><div class="muted">${qr.id}</div></div>`);
+  w.document.write('</body></html>');
+  w.document.close();
+  w.focus();
+  setTimeout(()=>{ w.print(); }, 400);
+});
+</script>
+</body>
+</html>
