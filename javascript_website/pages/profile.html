@@ -16,6 +16,7 @@
         <a href="../index.html" class="nav-btn">Home</a>
         <a href="chatbot.html" class="nav-btn restricted">Chatbot Data</a>
         <a href="admin.html" class="nav-btn restricted admin-only">Admin</a>
+        <a href="payroll.html" class="nav-btn restricted admin-only">Payroll</a>
         <a href="profile.html" class="nav-btn restricted">Profile</a>
       </nav>
     </div>
@@ -23,8 +24,107 @@
 
   <main>
     <section class="page">
-      <div class="content-container">
-        <div id="profile-info"></div>
+      <div class="content-container profile-layout">
+        <div class="profile-section">
+          <div id="profile-info"></div>
+        </div>
+        <div class="payroll-section">
+          <div id="payroll-info">
+          <div class="profile-card">
+            <h2>My Payroll Information</h2>
+            <div class="payroll-filters">
+              <div class="form-group">
+                <label for="payrollMonth">Month</label>
+                <select id="payrollMonth" class="form-control"></select>
+              </div>
+              <div class="form-group">
+                <label for="payrollPeriod">Period</label>
+                <select id="payrollPeriod" class="form-control">
+                  <option value="1-15">1 - 15</option>
+                  <option value="16-end">16 - end</option>
+                </select>
+              </div>
+              <button id="loadPayroll" class="action-btn primary">View Payroll</button>
+            </div>
+            <div id="payrollDetails">
+              <div class="payroll-summary">
+                <h3>Payroll Summary</h3>
+                <table class="data-table">
+                  <tbody>
+                    <tr>
+                      <td>Basic Pay:</td>
+                      <td id="basicPay">-</td>
+                    </tr>
+                    <tr>
+                      <td>Morning Shift Days:</td>
+                      <td id="morningDays">-</td>
+                    </tr>
+                    <tr>
+                      <td>Mid Shift Days:</td>
+                      <td id="midDays">-</td>
+                    </tr>
+                    <tr>
+                      <td>Night Shift Days:</td>
+                      <td id="nightDays">-</td>
+                    </tr>
+                    <tr>
+                      <td>Overtime Hours:</td>
+                      <td id="otHours">-</td>
+                    </tr>
+                    <tr>
+                      <td>Overtime Amount:</td>
+                      <td id="otAmount">-</td>
+                    </tr>
+                    <tr>
+                      <td>Regular Holiday Hours:</td>
+                      <td id="regHolHours">-</td>
+                    </tr>
+                    <tr>
+                      <td>Regular Holiday Amount:</td>
+                      <td id="regHolAmount">-</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <h3>Deductions</h3>
+                <table class="data-table">
+                  <tbody>
+                    <tr>
+                      <td>SSS Contribution:</td>
+                      <td id="sssEmployee">-</td>
+                    </tr>
+                    <tr>
+                      <td>PhilHealth Contribution:</td>
+                      <td id="philhealthEmployee">-</td>
+                    </tr>
+                    <tr>
+                      <td>Pagibig Contribution:</td>
+                      <td id="pagibigEmployee">-</td>
+                    </tr>
+                    <tr>
+                      <td>Total Deductions:</td>
+                      <td id="totalDeductions">-</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <h3>Net Pay</h3>
+                <table class="data-table">
+                  <tbody>
+                    <tr>
+                      <td>Gross Pay:</td>
+                      <td id="grossPay">-</td>
+                    </tr>
+                    <tr>
+                      <td>Net Pay:</td>
+                      <td id="netPay">-</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   </main>
@@ -78,7 +178,7 @@
   </script>
 
   <!-- Static Edit Profile Modal (hidden by default) -->
-  <div id="profile-edit-root" style="display:none;">
+  <div id="profile-edit-root" class="hidden">
     <div class="profile-edit-backdrop" id="profile-edit-backdrop" aria-hidden="true"></div>
     <div class="profile-edit-modal" role="dialog" aria-modal="true" aria-labelledby="profile-edit-title" hidden>
       <form class="profile-edit-form" id="profile-edit-form">
@@ -96,7 +196,7 @@
             <span>Enter Image URL</span>
             <input class="form-control" type="url" id="photo-url" name="photo-url" placeholder="Enter image URL">
           </label>
-          <button type="button" class="action-btn remove-photo" id="remove-photo" style="display:none;">Remove Profile Picture</button>
+          <button type="button" class="action-btn remove-photo hidden" id="remove-photo">Remove Profile Picture</button>
         </div>
 
         <div class="modal-actions">
@@ -106,5 +206,92 @@
       </form>
     </div>
   </div>
+
+  <script type="module">
+    import { initializePayrollSystem, computeForPeriod } from '../js/payroll.js';
+    import { firebaseConfig } from '../js/firebase-config.js';
+    import { getFirestore, collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js';
+
+    // Initialize payroll system
+    await initializePayrollSystem(firebaseConfig);
+    const db = getFirestore();
+
+    // Populate month select
+    const monthSelect = document.getElementById('payrollMonth');
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                   'July', 'August', 'September', 'October', 'November', 'December'];
+    months.forEach((month, index) => {
+      const option = document.createElement('option');
+      option.value = index + 1;
+      option.textContent = month;
+      monthSelect.appendChild(option);
+    });
+    monthSelect.value = new Date().getMonth() + 1;
+
+    // Handle payroll view button
+    document.getElementById('loadPayroll').addEventListener('click', async () => {
+      const month = document.getElementById('payrollMonth').value;
+      const period = document.getElementById('payrollPeriod').value;
+      
+      try {
+        // Get current user's data only
+        const user = auth.currentUser;
+        if (!user) return;
+
+        // Get user's employment details
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (!userDoc.exists()) return;
+        const userData = userDoc.data();
+
+        // Get attendance records for the user
+        const attendanceRef = collection(db, 'attendance');
+        const attendanceQuery = query(attendanceRef, where('userId', '==', user.uid));
+        const attendanceSnapshot = await getDocs(attendanceQuery);
+        const dtrRows = attendanceSnapshot.docs.map(doc => doc.data());
+
+        // Compute payroll for just this user
+        const payrollRows = computeForPeriod([userData], dtrRows, month, period);
+        
+        if (payrollRows && payrollRows.length > 0) {
+          const payroll = payrollRows[0];
+          
+          // Update UI with payroll details
+          document.getElementById('basicPay').textContent = formatCurrency(payroll.basic);
+          document.getElementById('morningDays').textContent = payroll.morningShiftDays;
+          document.getElementById('midDays').textContent = payroll.midShiftDays;
+          document.getElementById('nightDays').textContent = payroll.nightShiftDays;
+          document.getElementById('otHours').textContent = payroll.otHours;
+          document.getElementById('otAmount').textContent = formatCurrency(payroll.otAmount);
+          document.getElementById('regHolHours').textContent = payroll.regHolHours;
+          document.getElementById('regHolAmount').textContent = formatCurrency(payroll.regHolAmount);
+          document.getElementById('sssEmployee').textContent = formatCurrency(payroll.sssEmployee);
+          document.getElementById('philhealthEmployee').textContent = formatCurrency(payroll.philhealthEmployee);
+          document.getElementById('pagibigEmployee').textContent = formatCurrency(payroll.pagibigEmployee);
+          document.getElementById('totalDeductions').textContent = formatCurrency(payroll.totalDeductions);
+          document.getElementById('grossPay').textContent = formatCurrency(payroll.gross);
+          document.getElementById('netPay').textContent = formatCurrency(payroll.net);
+        } else {
+          // No payroll data found
+          const fields = ['basicPay', 'morningDays', 'midDays', 'nightDays', 'otHours', 
+                         'otAmount', 'regHolHours', 'regHolAmount', 'sssEmployee', 
+                         'philhealthEmployee', 'pagibigEmployee', 'totalDeductions', 
+                         'grossPay', 'netPay'];
+          fields.forEach(field => {
+            document.getElementById(field).textContent = '-';
+          });
+        }
+      } catch (error) {
+        console.error('Error loading payroll:', error);
+        alert('Error loading payroll information. Please try again.');
+      }
+    });
+
+    function formatCurrency(amount) {
+      return new Intl.NumberFormat('en-PH', {
+        style: 'currency',
+        currency: 'PHP'
+      }).format(amount);
+    }
+  </script>
 </body>
 </html>
