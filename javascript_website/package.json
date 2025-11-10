@@ -3,7 +3,10 @@
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "firebase": "^12.5.0",
-    "firebase-admin": "^13.5.0"
+    "firebase-admin": "^13.6.0",
+    "html5-qrcode": "^2.3.8",
+    "nanoid": "^5.1.6",
+    "qrcode": "^1.5.4"
   },
   "name": "javascript_website",
   "version": "1.0.0",
