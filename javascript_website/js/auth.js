@@ -61,12 +61,16 @@ function initializeAuthState() {
             
                         // If on restricted page, redirect to login — but allow unauthenticated
                         // users to remain on the public home page (root or index.html)
-                        const pathname = window.location.pathname || '';
-                        const isPublicPage = pathname === '/' || pathname.endsWith('/index.html') ||
-                            pathname.includes('login.html') || pathname.includes('signup.html') ||
-                            pathname.includes('reset-password.html');
+                        const currentPath = window.location.pathname;
+                        const isPublicPage = currentPath.endsWith('index.html') ||
+                            currentPath.includes('login.html') || 
+                            currentPath.includes('signup.html') ||
+                            currentPath.includes('reset-password.html');
+                        
                         if (!isPublicPage) {
-                                window.location.href = '/pages/login.html';
+                            // Get the correct relative path to login page
+                            const isInPagesDir = currentPath.includes('/pages/');
+                            window.location.href = isInPagesDir ? 'login.html' : 'pages/login.html';
                         }
         }
         
@@ -113,8 +117,8 @@ export async function logout() {
     try {
         await signOut(auth);
         console.log('Logout successful');
-        // Navigation and visibility will be handled by auth state change listener
-        window.location.href = '/pages/login.html';
+        // Redirect to login page using relative path
+        window.location.href = '../pages/login.html';
     } catch (error) {
         console.error('Logout failed:', error);
         throw error;
