@@ -8,8 +8,14 @@ export async function updateNavVisibility() {
     const user = auth.currentUser;
     console.log('Current user:', user?.uid); // Debug
 
+    // Select navigation sections
+    const authNav = nav.querySelector('.auth-nav');
+    const userNav = nav.querySelector('.user-nav');
+
     if (!user) {
-      // User is logged out - show only public links
+      // User is logged out - show auth nav, hide user nav
+      if (authNav) authNav.style.display = 'inline-flex';
+      if (userNav) userNav.style.display = 'none';
       nav.querySelectorAll('.restricted, .admin-only').forEach(link => {
         link.style.display = 'none';
       });
@@ -24,6 +30,9 @@ export async function updateNavVisibility() {
     console.log('User role:', role); // Debug
 
     // Update visibility based on role
+    if (authNav) authNav.style.display = 'none';
+    if (userNav) userNav.style.display = 'inline-flex';
+    
     nav.querySelectorAll('.nav-btn').forEach(link => {
       if (link.classList.contains('public-only')) {
         // Hide login/signup for logged in users
