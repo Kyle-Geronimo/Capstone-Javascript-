@@ -90,6 +90,7 @@ export async function initializeWeatherCards() {
             const weatherIcon = getWeatherIcon(weatherData.weatherCode);
             const card = document.createElement('div');
             card.className = 'weather-card';
+            card.setAttribute('data-hotel', hotel.name);
             card.innerHTML = `
                 <h3>${hotel.name}</h3>
                 <div class="weather-icon">${weatherIcon}</div>
