@@ -10,6 +10,7 @@
   <script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore-compat.js"></script>
   <script type="module" src="../js/auth.js"></script>
+  <script type="module" src="../js/admin.js"></script>
 </head>
 <body>
   <header>
@@ -19,6 +20,7 @@
         <a href="../index.html" class="nav-btn">Home</a>
         <a href="chatbot.html" class="nav-btn restricted">Chatbot Data</a>
         <a href="admin.html" class="nav-btn restricted admin-only">Admin</a>
+        <a href="payroll.html" class="nav-btn restricted admin-only">Payroll</a>
         <a href="profile.html" class="nav-btn restricted">Profile</a>
       </nav>
     </div>
@@ -40,9 +42,9 @@
 
       <!-- User Management Section -->
       <div class="admin-section">
-        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div class="section-header">
           <h3>User Management</h3>
-          <a href="archives.html" class="action-btn" style="text-decoration: none;">Archives</a>
+          <a href="archives.html" class="action-btn">Archives</a>
         </div>
         <div class="accounts-panel">
           <div id="accounts" class="accounts-list">
@@ -51,62 +53,7 @@
         </div>
       </div>
 
-      <!-- Payroll Management Section -->
-      <div class="admin-section">
-        <h3>Payroll Management</h3>
-        <div class="filters">
-            <h3 style="color: #1f4ea6; margin-bottom: 1rem;">Pay Period Selection</h3>
-              <div class="form-group flex gap-3 mb-3">
-                <div class="flex-1">
-                  <label for="monthSelect" class="form-label">Month</label>
-                  <select id="monthSelect" class="form-control"></select>
-                </div>
-                <div class="flex-1">
-                  <label for="periodSelect" class="form-label">Period</label>
-                  <select id="periodSelect" class="form-control">
-                    <option value="1-15">1 - 15</option>
-                    <option value="16-end">16 - end</option>
-                  </select>
-                </div>
-              </div>
-              <div class="button-group" style="margin: 1.5rem 0; padding: 0 1rem;">
-                <button id="loadFromFirestore" class="action-btn primary">Load Employees & DTR</button>
-                <button id="computePayroll" class="action-btn primary">Compute Payroll</button>
-                <button id="savePayroll" class="action-btn primary">Save Payroll</button>
-                <button id="exportCsv" class="action-btn secondary">Export CSV</button>
-              </div>
-            </div>
-
-            <div id="resultsArea" class="table-responsive">
-              <table id="payrollTable" class="data-table">
-                <thead>
-                  <tr>
-                    <th style="width: 40px;">#</th>
-                    <th style="width: 200px;">Name</th>
-                    <th style="width: 80px;">Rate</th>
-                    <th style="width: 60px;">Days</th>
-                    <th style="width: 100px;">Basic</th>
-                    <th style="width: 80px;">Night Hrs</th>
-                    <th style="width: 100px;">Night Amount</th>
-                    <th style="width: 80px;">OT Hrs</th>
-                    <th style="width: 100px;">OT Amount</th>
-                    <th style="width: 80px;">Reg Hol Hrs</th>
-                    <th style="width: 100px;">Reg Hol Amount</th>
-                    <th style="width: 100px;">Gross</th>
-                    <th style="width: 100px;">SSS (Emp)</th>
-                    <th style="width: 100px;">SSS (Er)</th>
-                    <th style="width: 120px;">Other Deductions</th>
-                    <th style="width: 100px;">Net</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-      </section>
-    </div>
+    </section>
   </main>
 
   <footer>
