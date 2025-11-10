@@ -72,7 +72,7 @@ export async function loadProfile(uid) {
     container.innerHTML = `
       <div class="profile-card">
         <div class="id-header">
-          <h2>Employee ID Card</h2>
+          <h2>Employee Profile</h2>
           <p>D' Mariners Inn Hotel</p>
         </div>
         
@@ -91,12 +91,7 @@ export async function loadProfile(uid) {
             <div class="id-value">${escapeHtml(role)}</div>
           </div>
 
-          <div class="info-group">
-            <div class="info-label">Employee ID</div>
-            <div class="employee-id-text">${escapeHtml(data.employeeId || 'Not assigned')}</div>
-          </div>
-
-          <!-- barcode removed per project request -->
+          <!-- Employee ID section removed -->
 
           <div class="info-group">
             <div class="info-label">Joined:</div>
