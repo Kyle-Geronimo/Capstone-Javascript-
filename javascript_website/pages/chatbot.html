@@ -2,35 +2,30 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>HotelLink - Chatbot Data</title>
+  <title>HotelLink - Chatbot Inquiries</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../css/styles.css">
+
 </head>
-<body>
+<body class="chatbot-page">
   <header>
     <div class="container">
-      <h1>HotelLink</h1>
+      <h1>Chatbot Inquiries Dashboard</h1>
       <nav>
         <a href="../index.html" class="nav-btn restricted">Home</a>
         <a href="chatbot.html" class="nav-btn restricted">Chatbot Data</a>
         <a href="admin.html" class="nav-btn restricted admin-only">Admin</a>
+        <a href="payroll.html" class="nav-btn restricted admin-only">Payroll</a>
         <a href="profile.html" class="nav-btn restricted">Profile</a>
       </nav>
     </div>
   </header>
 
   <main>
-    <section class="form-container chatbot-data-container">
-      <h2>Chatbot Data</h2>
+    <div class="chatbot-data-container">
       <div id="chatbot-data"></div>
-    </section>
-  </main>
-
-  <footer>
-    <div class="container">
-      <p>&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>
     </div>
-  </footer>
+  </main>
 
   <script type="module">
     import { auth } from '../js/firebase-config.js';
