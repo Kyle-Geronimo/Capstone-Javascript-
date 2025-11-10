@@ -2,9 +2,8 @@ import { auth, db } from './firebase-config.js';
 import {
   collection, query, where, onSnapshot,
   updateDoc, doc, getDocs, getDoc, setDoc, deleteDoc,
-  serverTimestamp, addDoc
+  serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
-
 // Generate user initials
 function getInitials(name) {
   if (!name) return '?';
@@ -49,22 +48,25 @@ export function watchRequestsRealtime() {
     }
     container.innerHTML = snapshot.docs.map(d => {
       const docData = d.data();
+      const username = docData.username || docData.email || '—';
+      const initials = getInitials(username);
+      const avatarColor = getAvatarColor(initials);
       return `
         <div class="user-item request-item" data-id="${d.id}">
-          <div class="user-avatar" style="background: ${getAvatarColor(getInitials(docData.username || docData.email))}">
-            ${getInitials(docData.username || docData.email)}
+          <div class="user-avatar" style="background: ${avatarColor}">
+            ${initials}
           </div>
           <div class="user-main">
-            <div class="user-name">${escapeHtml(docData.username || docData.email || '—')}</div>
+            <div class="user-name">${escapeHtml(username)}</div>
             <div class="user-email">${escapeHtml(docData.email || '—')}</div>
             <div class="user-meta">
-              <span class="user-role-badge">Pending</span>
-              <span class="request-note">${escapeHtml(docData.note || 'No additional notes')}</span>
-              <span class="request-date">Requested: ${new Date(docData.timestamp?.seconds * 1000).toLocaleDateString() || 'Unknown date'}</span>
+              <span class="user-role-badge pending-role">${docData.role || 'employee'} (Pending)</span>
+              <span class="user-note">Note: ${escapeHtml(docData.note || 'No additional notes')}</span>
+              <span class="user-date">Requested: ${new Date(docData.timestamp?.seconds * 1000).toLocaleDateString() || 'Unknown date'}</span>
             </div>
           </div>
-          <div class="user-actions request-actions">
-            <button class="approve-btn action-btn">Approve</button>
+          <div class="user-actions">
+            <button class="approve-btn action-btn primary">Approve</button>
             <button class="reject-btn action-btn">Reject</button>
           </div>
         </div>
@@ -77,238 +79,13 @@ export function watchRequestsRealtime() {
   });
 }
 
-// Calculate and save payroll data
-async function computeAndStorePayroll(month, period) {
-    try {
-        const year = new Date().getFullYear();
-        const startDay = period === '1-15' ? 1 : 16;
-        const endDay = period === '1-15' ? 15 : new Date(year, month, 0).getDate();
-        const startDate = new Date(year, month - 1, startDay).toISOString().split('T')[0];
-        const endDate = new Date(year, month - 1, endDay).toISOString().split('T')[0];
-
-        // Get all employees
-        const usersSnap = await getDocs(collection(db, 'users'));
-        const employees = usersSnap.docs
-            .filter(doc => doc.data().role !== 'admin')
-            .map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-
-        // Get attendance records for the period
-        const attendanceRef = collection(db, 'attendance');
-        const attendanceQuery = query(attendanceRef, 
-            where('date', '>=', startDate),
-            where('date', '<=', endDate)
-        );
-        const attendanceSnap = await getDocs(attendanceQuery);
-        const attendanceRecords = attendanceSnap.docs.map(doc => doc.data());
-
-        // Process each employee's payroll
-        const payrollRecords = [];
-        for (const employee of employees) {
-            const employeeAttendance = attendanceRecords.filter(record => 
-                record.userId === employee.id
-            );
-
-            // Calculate totals
-            let totalDays = 0;
-            let totalOTHours = 0;
-            let totalNightHours = 0;
-            let totalRegHolHours = 0;
-
-            employeeAttendance.forEach(record => {
-                // Calculate regular days
-                if (record.checkinTime && record.checkoutTime) {
-                    totalDays++;
-                }
-
-                // Add overtime hours
-                totalOTHours += record.otHours || 0;
-
-                // Add night differential hours (10 PM to 6 AM)
-                const nightHours = calculateNightHours(record.checkinTime, record.checkoutTime);
-                totalNightHours += nightHours;
-
-                // Add regular holiday hours if applicable
-                totalRegHolHours += record.regHolHours || 0;
-            });
-
-            // Calculate pay
-            const rate = Number(employee.rate || 0);
-            const basic = rate * totalDays;
-            const nightAmount = rate * 0.1 * (totalNightHours / 8); // Night differential is 10%
-            const otAmount = (rate / 8) * 1.25 * totalOTHours; // OT is 1.25x
-            const regHolAmount = (rate / 8) * totalRegHolHours;
-            const gross = basic + nightAmount + otAmount + regHolAmount;
-
-            // Deductions
-            const sssEmployee = Math.round((gross * 0.05) * 100) / 100; // 5%
-            const sssEmployer = Math.round((gross * 0.10) * 100) / 100; // 10%
-            const otherDeductions = 0;
-            const net = gross - sssEmployee - otherDeductions;
-
-            // Create payroll record
-            const payrollRecord = {
-                employeeId: employee.id,
-                employeeName: employee.username || employee.email,
-                period: `${year}-${month.toString().padStart(2, '0')}-${period}`,
-                rate,
-                daysWorked: totalDays,
-                basic,
-                nightHours: totalNightHours,
-                nightAmount,
-                otHours: totalOTHours,
-                otAmount,
-                regHolHours: totalRegHolHours,
-                regHolAmount,
-                gross,
-                sssEmployee,
-                sssEmployer,
-                otherDeductions,
-                net,
-                computedAt: new Date().toISOString(),
-                status: 'pending' // pending, approved, paid
-            };
-
-            payrollRecords.push(payrollRecord);
-        }
-
-        // Store in Firestore
-        const payrollRef = collection(db, 'payroll');
-        const batchId = `${year}-${month.toString().padStart(2, '0')}-${period}`;
-        
-        // Store batch info
-        await setDoc(doc(db, 'payrollBatches', batchId), {
-            year,
-            month,
-            period,
-            computedAt: new Date().toISOString(),
-            totalEmployees: payrollRecords.length,
-            totalNet: payrollRecords.reduce((sum, record) => sum + record.net, 0),
-            status: 'pending'
-        });
-
-        // Store individual records
-        for (const record of payrollRecords) {
-            await addDoc(payrollRef, {
-                ...record,
-                batchId
-            });
-        }
-
-        // Update the payroll table
-        updatePayrollTable(payrollRecords);
-
-        return { success: true, message: `Computed and stored payroll for ${payrollRecords.length} employees` };
-    } catch (error) {
-        console.error('Error computing payroll:', error);
-        return { success: false, message: 'Error computing payroll: ' + error.message };
-    }
-}
-
-// Calculate night shift hours
-function calculateNightHours(checkinTime, checkoutTime) {
-    if (!checkinTime || !checkoutTime) return 0;
-
-    const checkin = new Date(checkinTime);
-    const checkout = new Date(checkoutTime);
-    
-    // Night hours are from 10 PM (22:00) to 6 AM (06:00)
-    let nightHours = 0;
-    
-    // Set time ranges for night differential
-    const nightStart = new Date(checkin);
-    nightStart.setHours(22, 0, 0);
-    const nightEnd = new Date(checkin);
-    nightEnd.setHours(29, 0, 0); // 29 hours means 5 AM next day
-
-    // Calculate overlap with night hours
-    const start = Math.max(checkin.getTime(), nightStart.getTime());
-    const end = Math.min(checkout.getTime(), nightEnd.getTime());
-    
-    if (end > start) {
-        nightHours = (end - start) / (1000 * 60 * 60);
-    }
-
-    return Math.round(nightHours * 100) / 100;
-}
-
-// Display payroll data in table
-function updatePayrollTable(records) {
-    const tbody = document.querySelector('#payrollTable tbody');
-    if (!tbody) return;
-
-    tbody.innerHTML = records.map((record, index) => `
-        <tr>
-            <td>${index + 1}</td>
-            <td>${escapeHtml(record.employeeName)}</td>
-            <td>${record.rate.toFixed(2)}</td>
-            <td>${record.daysWorked}</td>
-            <td>${record.basic.toFixed(2)}</td>
-            <td>${record.nightHours.toFixed(2)}</td>
-            <td>${record.nightAmount.toFixed(2)}</td>
-            <td>${record.otHours.toFixed(2)}</td>
-            <td>${record.otAmount.toFixed(2)}</td>
-            <td>${record.regHolHours.toFixed(2)}</td>
-            <td>${record.regHolAmount.toFixed(2)}</td>
-            <td>${record.gross.toFixed(2)}</td>
-            <td>${record.sssEmployee.toFixed(2)}</td>
-            <td>${record.sssEmployer.toFixed(2)}</td>
-            <td>${record.otherDeductions.toFixed(2)}</td>
-            <td>${record.net.toFixed(2)}</td>
-        </tr>
-    `).join('');
-}
-
 // Function to generate random time between two times
 function randomTime(start, end) {
-  const startTime = start.getTime();
-  const endTime = end.getTime();
-  const randomTime = startTime + Math.random() * (endTime - startTime);
-  return new Date(randomTime);
-}
-
-// NOTE: The sample data generation feature and its UI button were removed per request.
-// The helper utilities used for generating test data remain if needed elsewhere.
-
-// Initialize event listeners
-document.addEventListener('DOMContentLoaded', () => {
-    // Initialize month select
-    const monthSelect = document.getElementById('monthSelect');
-    if (monthSelect) {
-        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                       'July', 'August', 'September', 'October', 'November', 'December'];
-        monthSelect.innerHTML = months.map((month, index) => 
-            `<option value="${index + 1}">${month}</option>`
-        ).join('');
-        monthSelect.value = new Date().getMonth() + 1;
-    }
-
-  // NOTE: Removed sample data generation button/event hookup as feature was removed.
-
-    // Compute payroll button
-    const computePayrollBtn = document.getElementById('computePayroll');
-    if (computePayrollBtn) {
-        computePayrollBtn.addEventListener('click', async () => {
-            const month = parseInt(monthSelect.value);
-            const period = document.getElementById('periodSelect').value;
-
-            computePayrollBtn.disabled = true;
-            computePayrollBtn.textContent = 'Computing...';
-
-            try {
-                const result = await computeAndStorePayroll(month, period);
-                alert(result.message);
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Error computing payroll: ' + error.message);
-            } finally {
-                computePayrollBtn.disabled = false;
-                computePayrollBtn.textContent = 'Compute Payroll';
-            }
-        });
-    }
+    const startTime = start.getTime();
+    const endTime = end.getTime();
+    const randomTime = startTime + Math.random() * (endTime - startTime);
+    return new Date(randomTime);
+}document.addEventListener('DOMContentLoaded', () => {
 });
 
 export async function loadAccounts() {
@@ -338,15 +115,14 @@ export async function loadAccounts() {
         <div class="user-main">
           <div class="user-name">${escapeHtml(u.username || '—')}</div>
           <div class="user-email">${escapeHtml(u.email || '—')}</div>
-          <div class="employee-id-text">Employee ID: ${escapeHtml(u.employeeId || 'Not assigned')}</div>
           <div class="user-meta">
             <span class="user-role-badge ${u.role === 'admin' ? 'admin-role' : ''}">${escapeHtml(u.role || 'employee')}</span>
-            <span class="user-id">ID: ${escapeHtml(u.id)}</span>
+            <span class="user-id">User ID: ${escapeHtml(u.id)}</span>
           </div>
         </div>
         <div class="user-actions">
           <button class="edit-btn action-btn">Edit</button>
-          <button class="delete-btn action-btn">Delete</button>
+          <button class="archive-btn action-btn">Archive</button>
         </div>
       </div>
     `).join('');
@@ -354,7 +130,7 @@ export async function loadAccounts() {
 
 
     container.querySelectorAll('.edit-btn').forEach(b => b.addEventListener('click', onEditUser));
-    container.querySelectorAll('.delete-btn').forEach(b => b.addEventListener('click', onDeleteUser));
+    container.querySelectorAll('.archive-btn').forEach(b => b.addEventListener('click', onArchiveUser));
   } catch (err) {
     container.innerHTML = `<em>Error loading accounts: ${escapeHtml(err.message)}</em>`;
   }
@@ -371,21 +147,13 @@ async function onApprove(e) {
 
     // Create Auth user
     const userCred = await createUserWithEmailAndPassword(auth, reqData.email, reqData.password);
-    
-    // Generate unique employee ID (XXX-XXX format)
-    const generateEmployeeId = () => {
-      const nums = Array.from({ length: 6 }, () => Math.floor(Math.random() * 10));
-      return `${nums.slice(0, 3).join('')}-${nums.slice(3).join('')}`;
-    };
-    const employeeId = generateEmployeeId();
 
-    // Create users document with employee ID
+    // Create users document
     await setDoc(doc(db, 'users', userCred.user.uid), {
       email: reqData.email,
       username: reqData.username,
       role: reqData.role || 'employee',
-      createdAt: new Date(),
-      employeeId: employeeId
+      createdAt: new Date()
     });
 
     // Delete the request
@@ -501,9 +269,9 @@ async function onEditUser(e) {
   }
 }
 
-async function onDeleteUser(e) {
+async function onArchiveUser(e) {
   const id = e.target.closest('[data-id]').dataset.id;
-  if (!confirm('Delete this account? This cannot be undone.')) return;
+  if (!confirm('Archive this account? The account will be deactivated and all its data will be moved to the archives. This action cannot be undone.')) return;
   
   try {
     // First delete the user document from Firestore
@@ -517,17 +285,10 @@ async function onDeleteUser(e) {
     const attendanceSnap = await getDocs(attendanceQuery);
     const attendanceData = attendanceSnap.docs.map(doc => doc.data());
 
-    // Get payroll records
-    const payrollRef = collection(db, 'payroll');
-    const payrollQuery = query(payrollRef, where('userId', '==', id));
-    const payrollSnap = await getDocs(payrollQuery);
-    const payrollData = payrollSnap.docs.map(doc => doc.data());
-
     // Create archive document with all user data
     const archiveData = {
       userData: userData,
       attendanceData: attendanceData,
-      payrollData: payrollData,
       archivedAt: serverTimestamp(),
       archivedBy: auth.currentUser.uid
     };
@@ -540,11 +301,6 @@ async function onDeleteUser(e) {
     
     // Remove attendance records
     for (const doc of attendanceSnap.docs) {
-      await deleteDoc(doc.ref);
-    }
-
-    // Remove payroll records
-    for (const doc of payrollSnap.docs) {
       await deleteDoc(doc.ref);
     }
 
@@ -608,7 +364,6 @@ export function watchArchivedAccountsRealtime() {
         <div class="user-main">
           <div class="user-name">${escapeHtml(u.username || u.email || '—')}</div>
           <div class="user-email">${escapeHtml(u.email || '—')}</div>
-          <div class="employee-id-text">Employee ID: ${escapeHtml(u.employeeId || 'Not assigned')}</div>
           <div class="user-meta">
             <span class="user-role-badge">${escapeHtml(u.role || 'employee')}</span>
             <span class="user-id">ID: ${escapeHtml(u.id)}</span>
@@ -625,6 +380,75 @@ export function watchArchivedAccountsRealtime() {
     container.querySelectorAll('.view-details-btn').forEach(b => 
       b.addEventListener('click', onViewArchivedDetails));
   }, err => container.innerHTML = `<em>Error: ${escapeHtml(err.message)}</em>`);
+}
+
+async function onViewArchivedDetails(e) {
+  const id = e.target.closest('[data-id]').dataset.id;
+  try {
+    // Get archived user data
+    const archivedDoc = await getDoc(doc(db, 'archivedUsers', id));
+    if (!archivedDoc.exists()) {
+      alert('Archived user data not found');
+      return;
+    }
+
+    const data = archivedDoc.data();
+    const userData = data.userData;
+    const attendanceData = data.attendanceData || [];
+
+    // Create modal HTML
+    const modalHtml = `
+      <div class="profile-edit-backdrop">
+        <div class="profile-edit-modal archive-details-modal">
+          <h3>Archived User Details</h3>
+          <div class="archive-details">
+            <h4>User Information</h4>
+            <div class="details-section">
+              <p><strong>Username:</strong> ${escapeHtml(userData.username || '—')}</p>
+              <p><strong>Email:</strong> ${escapeHtml(userData.email || '—')}</p>
+              <p><strong>Role:</strong> ${escapeHtml(userData.role || '—')}</p>
+              <p><strong>Archived Date:</strong> ${new Date(data.archivedAt?.seconds * 1000).toLocaleDateString()}</p>
+            </div>
+
+            <h4>Attendance Records</h4>
+            <div class="details-section scrollable">
+              ${attendanceData.length ? attendanceData.map(record => `
+                <div class="record-item">
+                  <p><strong>Date:</strong> ${new Date(record.date?.seconds * 1000).toLocaleDateString()}</p>
+                  <p><strong>Time In:</strong> ${record.timeIn ? new Date(record.timeIn?.seconds * 1000).toLocaleTimeString() : '—'}</p>
+                  <p><strong>Time Out:</strong> ${record.timeOut ? new Date(record.timeOut?.seconds * 1000).toLocaleTimeString() : '—'}</p>
+                </div>
+              `).join('') : '<p>No attendance records found</p>'}
+            </div>
+
+
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="action-btn secondary" id="closeArchiveDetails">Close</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Add modal to document
+    const modalContainer = document.createElement('div');
+    modalContainer.innerHTML = modalHtml;
+    document.body.appendChild(modalContainer);
+
+    // Handle close button and backdrop click
+    const closeBtn = document.getElementById('closeArchiveDetails');
+    const backdrop = document.querySelector('.profile-edit-backdrop');
+
+    const closeModal = () => modalContainer.remove();
+    closeBtn.addEventListener('click', closeModal);
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) closeModal();
+    });
+
+  } catch (err) {
+    console.error('Error viewing archived details:', err);
+    alert('Error viewing archived details: ' + err.message);
+  }
 }
 
 export function watchAccountsRealtime() {
@@ -688,5 +512,3 @@ window.addEventListener('DOMContentLoaded', () => {
     watchArchivedAccountsRealtime();
   }
 });
-
-
