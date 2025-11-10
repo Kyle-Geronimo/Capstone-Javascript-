@@ -22,6 +22,7 @@
         <div class="user-nav">
           <a href="pages/chatbot.html" class="nav-btn restricted">Chatbot Data</a>
           <a href="pages/admin.html" class="nav-btn restricted admin-only">Admin</a>
+          <a href="pages/payroll.html" class="nav-btn restricted admin-only">Payroll</a>
           <a href="pages/profile.html" class="nav-btn restricted">Profile</a>
           <a href="#" id="logout-btn" class="nav-btn restricted">Logout</a>
         </div>
@@ -39,20 +40,6 @@
         <div id="auth-buttons" class="auth-buttons">
           <button id="login-btn" class="action-btn">Login</button>
           <button id="signup-btn" class="action-btn">Sign Up</button>
-        </div>
-        
-        <!-- Attendance Card -->
-        <div class="attendance-card restricted">
-          <h3>Daily Attendance</h3>
-          <div class="button-group center">
-            <button id="checkinBtn" class="scan-btn action-btn">Check In</button>
-            <button id="checkoutBtn" class="scan-btn action-btn">Check Out</button>
-          </div>
-          <div id="scannerContainer" class="scanner-container" style="display: none;">
-            <video id="video" autoplay playsinline></video>
-            <p id="scannerStatus" class="scanner-status"></p>
-            <button id="cancelScanBtn" class="action-btn cancel-btn" style="display: none;">Cancel</button>
-          </div>
         </div>
 
         <!-- Weather Dashboard -->
