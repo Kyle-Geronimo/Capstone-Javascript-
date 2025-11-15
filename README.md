@@ -219,7 +219,7 @@ javascript_website/
   }
 }
 ```
-```
+
 
 9. **Add Authorized Domains:**
    - Go to Authentication → Settings → Authorized domains
