@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Generate QR — HRIS</title>
+  <link rel="stylesheet" href="../css/styles.css">
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore-compat.js"></script>
+  <script type="module" src="../js/auth.js"></script>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <div style="display: flex; align-items: center; gap: 2rem;">
+        <a href="payroll.html" class="nav-btn" style="background: #4f8cff; color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none;">← Back</a>
+        <h1>HotelLink</h1>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="form-container chatbot-data-container admin-dashboard">
+      <h2>QR Dashboard</h2>
+
+      <div class="admin-section">
+
+        <div style="margin-top: 1.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+          <!-- LEFT PANEL: GENERATOR -->
+          <div>
+            <h4 style="color: #1f4ea6; margin-top: 0; margin-bottom: 1rem;">Employee QR Generator</h4>
+            <form id="createForm" class="qr-generator-form">
+              <div class="form-group">
+                <label style="font-weight: bold;">Employee full name</label>
+                <input id="name" placeholder="Employee full name" required class="form-control" />
+              </div>
+              <div class="form-group">
+                <label style="font-weight: bold;">Role (optional)</label>
+                <input id="role" placeholder="Role (optional)" class="form-control" />
+              </div>
+              <div class="form-group">
+                <label style="font-weight: bold;">Rate (₱ / hr)</label>
+                <input id="rate" placeholder="Rate (₱ / hr) optional" type="number" step="0.01" class="form-control" />
+              </div>
+              <button type="submit" class="action-btn primary">Create & Generate QR</button>
+            </form>
+
+            <div id="resultArea" style="display:none; margin-top: 2rem; padding: 1.5rem; background: #f8f9fd; border-radius: 8px; border: 1px solid #e8ecf5;">
+              <h3 style="color: #1f4ea6; margin-top: 0;">Employee created</h3>
+              <div class="generator-result-info" id="info" style="margin-bottom: 1.5rem;"></div>
+              <div class="generator-qr-preview" id="qrPreview" style="text-align: center; margin: 1.5rem 0;"></div>
+              <div class="generator-result-buttons" style="display: flex; gap: 1rem; justify-content: center; margin-top: 1.5rem;">
+                <button id="downloadBtn" class="action-btn">Download PNG</button>
+                <button id="printBtn" class="action-btn">Print</button>
+              </div>
+            </div>
+
+            <div id="status" style="margin-top: 1.5rem;"></div>
+          </div>
+
+          <!-- RIGHT PANEL: SCANNER -->
+          <div>
+            <h4 style="color: #1f4ea6; margin-top: 0; margin-bottom: 1rem;">QR Code Scanner</h4>
+            
+            <div class="scanner-controls">
+              <div class="form-group">
+                <label style="font-weight: bold;">Action</label>
+                <select id="action" class="form-control">
+                  <option value="in">Time In</option>
+                  <option value="out">Time Out</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label style="font-weight: bold;">Camera</label>
+                <select id="cameraList" class="form-control"></select>
+              </div>
+
+              <div class="button-group">
+                <button id="startBtn" class="action-btn primary">Start</button>
+                <button id="stopBtn" class="action-btn" disabled>Stop</button>
+                <button id="retryBtn" class="action-btn secondary">Retry Cameras</button>
+              </div>
+
+              <div class="form-group">
+                <label style="font-weight: bold; display: block; margin-bottom: 0.5rem;">Upload QR Image</label>
+                <div style="display: flex; gap: 0.75rem; align-items: center;">
+                  <input id="filePicker" type="file" accept="image/*" class="file-input" style="display: none;" /> 
+                  <button type="button" class="action-btn secondary" style="flex: 1; margin: 0;" onclick="document.getElementById('filePicker').click();">Choose File</button>
+                  <span id="fileNameDisplay" style="font-size: 0.85rem; color: #666; flex: 2;">No file selected</span>
+                </div>
+                <button id="scanFileBtn" class="action-btn">Scan File</button>
+              </div>
+            </div>
+
+            <div id="reader" style="width: 100%; max-width: 100%; height: 300px; margin: 1.5rem 0; border-radius: 8px; border: 2px solid #e8ecf5; background: #000; display: flex; align-items: center; justify-content: center; color: #999;">Camera preview will appear here</div>
+            <div id="status-scanner" style="margin: 1.5rem 0; padding: 1rem; border-radius: 6px; background: #e3f2fd; color: #1f4ea6; border-left: 4px solid #4f8cff;">Status: idle</div>
+
+            <div style="font-size:0.9rem; color:#444; margin-top:0.5rem;">If no cameras appear, ensure your browser/site permissions allow camera access and try <strong>Retry Cameras</strong>. If the Html5Qrcode script is blocked by an extension, use the local vendor copy.</div>
+
+            <div class="scanner-debug" id="debug" style="background: #1a1a1a; color: #00ff66; padding: 1rem; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 0.8rem; max-height: 150px; overflow: auto; margin-top: 1.5rem;">Debug log...</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>
+    </div>
+  </footer>
+
+<script>
+/*
+Generator page (patched)
+- Uses res.text() fallback to show raw server response if it's not JSON
+*/
+</script>
+  
+  <!-- Html5Qrcode library: prefer local copy in ../vendor, fall back to CDN if missing -->
+  <script src="../vendor/html5-qrcode.min.js"></script>
+  <script>
+    (function(){
+      if (typeof Html5Qrcode === 'undefined') {
+        var s = document.createElement('script');
+        s.src = 'https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js';
+        s.onload = function(){ console.log('Loaded Html5Qrcode from CDN fallback'); };
+        s.onerror = function(){ console.warn('Failed to load Html5Qrcode from CDN (possibly blocked). If blocked, run `npm run copy-vendor` or copy node_modules/html5-qrcode/html5-qrcode.min.js to vendor/html5-qrcode.min.js'); };
+        document.head.appendChild(s);
+      }
+    })();
+  </script>
+
+<script type="module">
+  import { auth } from '../js/firebase-config.js';
+  import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
+  import { initializeGenerator, initializeScanner } from '../js/qr.js';
+
+  // same UI init you already had
+  updateNavVisibility();
+  highlightActiveNavBtn();
+  auth.onAuthStateChanged(() => { updateNavVisibility(); highlightActiveNavBtn(); });
+
+  // wait for Html5Qrcode to appear (tries for timeoutMs)
+  function waitForHtml5Qrcode(timeoutMs = 7000) {
+    return new Promise((resolve, reject) => {
+      if (window.Html5Qrcode) return resolve();
+      const start = Date.now();
+      const iv = setInterval(() => {
+        if (window.Html5Qrcode) { clearInterval(iv); return resolve(); }
+        if (Date.now() - start > timeoutMs) { clearInterval(iv); return reject(new Error('Html5Qrcode did not load within ' + timeoutMs + 'ms')); }
+      }, 150);
+    });
+  }
+
+  (async () => {
+    try {
+      initializeGenerator(); // generator doesn't need the lib
+      await waitForHtml5Qrcode(7000);
+      console.log('Html5Qrcode available — initializing scanner.');
+      initializeScanner();
+    } catch (err) {
+      console.error('Failed to initialize scanner (Html5Qrcode missing):', err);
+      // update UI status-scanner if present
+      const statusEl = document.getElementById('status-scanner') || document.getElementById('status');
+      if (statusEl) {
+        statusEl.textContent = 'Status: Html5Qrcode failed to load — check ../vendor/html5-qrcode.min.js and console.';
+        statusEl.className = 'utility-status error';
+      }
+    }
+  })();
+</script>
+</body>
+</html>

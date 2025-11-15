@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HotelLink - Sign Up</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="../css/styles.css">
+  <style>
+    nav { display: flex; align-items: center; gap: 1.5rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>HotelLink</h1>
+      <nav>
+        <a href="../index.html" class="nav-btn">Home</a>
+        <a href="login.html" class="nav-btn">Login</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="page">
+      <div class="form-container">
+        <h2>Sign Up</h2>
+        <label for="signup-username">Full Name</label>
+        <input id="signup-username" type="text" placeholder="Enter your full name">
+        <label for="signup-email">Email</label>
+        <div class="email-wrap">
+          <input id="signup-email" type="email" placeholder="Enter your email">
+          <div class="email-notice">
+            Note: Please use your business email as it will be visible to administrators.
+          </div>
+        </div>
+        <label for="signup-password">Password</label>
+        <div class="password-wrap">
+          <input id="signup-password" type="password" placeholder="Enter your password">
+          <button type="button" class="toggle-password action-btn secondary" data-target="signup-password">Show</button>
+        </div>
+        <label for="signup-role">Role</label>
+        <select id="signup-role">
+          <option value="employee">Employee</option>
+          <option value="admin">Admin</option>
+        </select>
+        <div class="button-container center-button">
+          <button id="signup-btn" class="action-btn primary">Sign Up</button>
+        </div>
+        <p class="text-center">Already have an account? <a href="login.html" class="link-btn">Login</a></p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>&copy; 2025 D’ Mariners Inn Hotel. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script type="module">
+    import { auth } from '../js/firebase-config.js';
+    import { signup } from '../js/auth.js';
+    import { updateNavVisibility } from '../js/nav-control.js';
+    import { initShowPassword } from '../js/show-password.js';
+
+    // Update navigation on load
+    updateNavVisibility();
+    
+    // Initialize show password toggle
+    initShowPassword();
+
+    document.getElementById('signup-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('signup-btn');
+      const username = document.getElementById('signup-username').value.trim();
+      const email = document.getElementById('signup-email').value;
+      const password = document.getElementById('signup-password').value;
+      const role = document.getElementById('signup-role').value;
+
+      // Basic client-side validation
+      if (!email || !password) {
+        alert('Please enter email and password');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
+
+      try {
+        // Call the existing signup helper which writes to accountRequests
+        await signup(email, password, role, username);
+        // Give user feedback — signup() already alerts in auth.js, but show a friendly message here too
+        btn.textContent = 'Submitted';
+        // Clear sensitive fields
+        document.getElementById('signup-password').value = '';
+
+        // Optionally redirect after a short delay
+        setTimeout(() => {
+          window.location.href = '../index.html';
+        }, 1500);
+      } catch (err) {
+        console.error('Signup error:', err);
+        alert(`Signup failed: ${err.code || ''} ${err.message || err}`);
+        btn.disabled = false;
+        btn.textContent = 'Sign Up';
+      }
+    });
+
+    // Redirect if already logged in
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        window.location.href = '../index.html';
+      }
+      updateNavVisibility();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HotelLink - Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="../css/styles.css">
+  <style>
+    nav { display: flex; align-items: center; gap: 1.5rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>HotelLink</h1>
+      <nav>
+        <a href="../index.html" class="nav-btn">Home</a>
+        <a href="signup.html" class="nav-btn">Sign Up</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="page">
+      <div class="form-container">
+        <h2>Login</h2>
+        <label for="login-email">Email</label>
+        <input id="login-email" type="email" placeholder="Enter your email">
+        <label for="login-password">Password</label>
+        <div class="password-wrap">
+          <input id="login-password" type="password" placeholder="Enter your password">
+          <button type="button" class="toggle-password action-btn secondary" data-target="login-password">Show</button>
+        </div>
+        <div class="button-container center-button">
+          <button id="login-btn" class="action-btn primary">Login</button>
+        </div>
+        <div class="form-links text-center">
+          <p>Don't have an account? <a href="signup.html" class="link-btn">Sign up</a></p>
+          <p><a href="reset-password.html" class="link-btn">Forgot Password?</a></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>&copy; 2025 D’ Mariners Inn Hotel. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script type="module">
+    import { auth } from '../js/firebase-config.js';
+    import { login } from '../js/auth.js';
+    import { updateNavVisibility } from '../js/nav-control.js';
+    import { initShowPassword } from '../js/show-password.js';
+
+    // Initialize show password toggle
+    initShowPassword();
+
+    // Handle login button click
+    document.getElementById('login-btn').addEventListener('click', async () => {
+      const email = document.getElementById('login-email').value;
+      const password = document.getElementById('login-password').value;
+      try {
+        await login(email, password);
+        window.location.href = '../index.html';
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+
+    // Redirect if already logged in
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        window.location.href = '../index.html';
+      }
+      updateNavVisibility();
+    });
+  </script>
+</body>
+</html>
