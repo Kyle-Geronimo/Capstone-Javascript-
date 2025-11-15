@@ -22,11 +22,23 @@ A web-based workplace dashboard for managing chatbot modules, user profiles, aut
 
 ```
 javascript_website/
+├── .gitignore
 ├── css/
 │   └── styles.css
+├── firebase.json
+├── firestore.indexes.json
+├── firestore.rules
+├── functions/
+│   └── index.js
+├── image/
+│   └── logo/
+│       ├── Bicotels Hotel.jpg
+│       ├── DMariners Inn Hotel.jpg
+│       └── Wennrod Hotel.jpg
+├── index.html
 ├── js/
 │   ├── admin.js
-│   ├── attendance.js
+│   ├── archives.js
 │   ├── auth.js
 │   ├── chatbot.js
 │   ├── firebase-config.js
@@ -35,23 +47,27 @@ javascript_website/
 │   ├── node.js
 │   ├── payroll.js
 │   ├── profile.js
+│   ├── qr.js
 │   ├── show-password.js
 │   └── weather.js
+├── launch.json
+├── mariners-hotellink-firebase-adminsdk-fbsvc-65bfc6c5b7.json
+├── node_modules/
+├── package-lock.json
+├── package.json
 ├── pages/
 │   ├── admin.html
+│   ├── archives.html
 │   ├── chatbot.html
 │   ├── login.html
+│   ├── payroll.html
 │   ├── profile.html
+│   ├── qr-dashboard.html
 │   ├── reset-password.html
 │   └── signup.html
-├── functions/
-│   └── index.js
-├── public/
-│   └── index.html
-├── firebase.json
-├── firestore.indexes.json
-├── firestore.rules
-└── index.html
+├── server.js
+└── vendor/
+  └── html5-qrcode.min.js
 ```
 
 ## Setup Instructions
@@ -129,19 +145,78 @@ javascript_website/
    rules_version = '2';
    service cloud.firestore {
      match /databases/{database}/documents {
-       // 🔹 Account requests
-       match /accountRequests/{requestId} {
-         allow create: if true;
-         allow read, write: if request.auth != null;
-       }
-       
-       // 🔹 User profiles
-       match /users/{userId} {
-         allow read: if request.auth != null;
-         allow write: if request.auth != null && request.auth.uid == userId;
-       }
-     }
-   }
+
+    // Helper: check if user is signed in
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper: check if user is admin
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Helper: check if user is an employee/staff
+    function isEmployee() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'employee';
+    }
+
+    // 🔹 Account Requests
+    match /accountRequests/{requestId} {
+      // Anyone can submit a signup request
+      allow create: if true;
+      // Only admins can view or manage requests
+      allow read, update, delete: if isAdmin();
+    }
+
+    // 🔹 User Profiles
+    match /users/{userId} {
+      // All signed-in users can read basic profile info
+      allow read: if isSignedIn();
+      // Users can manage their own profile
+      allow create, update, delete: if request.auth.uid == userId;
+      // Admins can manage all profiles
+      allow read, write: if isAdmin();
+    }
+
+    // 🔹 Archived Users
+    match /archivedUsers/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 🔹 Attendance
+    match /attendance/{docId} {
+      allow read: if isSignedIn();
+      // Employees can write their own attendance
+      allow create, update: if request.auth.uid == resource.data.userId || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // 🔹 Payroll
+    match /payroll/{docId} {
+      // Everyone can read their own payroll; admins can read all
+      allow read: if isAdmin() || resource.data.employeeId == request.auth.uid;
+      allow write, delete: if isAdmin();
+    }
+
+    // 🔹 Payroll Batches
+    match /payrollBatches/{batchId} {
+      allow read, write, delete: if isAdmin();
+    }
+
+    // 🔹 Chatbot Inquiries
+    match /chatbot/{docId} {
+      // Any signed-in user (admin or employee) can read inquiries
+      allow read: if isAdmin() || isEmployee();
+      // Any signed-in user can create new chatbot inquiries
+      allow create: if isSignedIn();
+      // Only admins can edit or delete chatbot logs
+      allow update, delete: if isAdmin();
+    }
+  }
+}
    ```
 
 9. **Add Authorized Domains:**
