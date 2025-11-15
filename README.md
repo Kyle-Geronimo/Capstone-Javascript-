@@ -142,7 +142,7 @@ javascript_website/
 8. **Set up Firestore Rules:**
    - Go to Firestore Database → Rules
    - Replace with these rules:
-   ```javascript
+   ```
    rules_version = '2';
    service cloud.firestore {
      match /databases/{database}/documents {
@@ -216,9 +216,9 @@ javascript_website/
       // Only admins can edit or delete chatbot logs
       allow update, delete: if isAdmin();
     }
-  }
-}
-```
+   }
+   }
+
 
 
 9. **Add Authorized Domains:**
@@ -266,4 +266,5 @@ MIT License
 ---
 
 **Made for Capstone Project 2025**
+
 
