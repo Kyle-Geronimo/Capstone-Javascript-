@@ -105,10 +105,11 @@ javascript_website/
    }
    ```
 
-   Start the admin server:
-   ```bash
-   node server.js
-   ```
+  Start the admin server (from your project root). In PowerShell run:
+  ```powershell
+  cd C:\Users\chaos\a\Version6\javascript_website
+  node server.js
+  ```
 
 5. **Get Admin SDK Credentials:**
    - Go to Firebase Console → Project Settings → Service Accounts
