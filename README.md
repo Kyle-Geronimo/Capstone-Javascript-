@@ -152,9 +152,9 @@ javascript_website/
    - Go to Firestore Database → Rules
    - Replace with these rules (paste into the Firestore Rules editor or deploy from `firestore.rules`):
    ```
-   rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
+    rules_version = '2';
+    service cloud.firestore {
+    match /databases/{database}/documents {
 
     // Helper: check if user is signed in
     function isSignedIn() {
@@ -274,7 +274,7 @@ service cloud.firestore {
     }
     }
     }
-    ```
+    ``` 
 
 9. **Add Authorized Domains:**
    - Go to Authentication → Settings → Authorized domains
@@ -321,4 +321,3 @@ MIT License
 ---
 
 **Made for Capstone Project 2025**
-
