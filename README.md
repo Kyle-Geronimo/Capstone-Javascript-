@@ -272,9 +272,9 @@ service cloud.firestore {
     match /{document=**} {
       allow read, write: if false;
     }
-  }
-}
-``` 
+    }
+    }
+    ```
 
 9. **Add Authorized Domains:**
    - Go to Authentication → Settings → Authorized domains
@@ -321,3 +321,4 @@ MIT License
 ---
 
 **Made for Capstone Project 2025**
+
