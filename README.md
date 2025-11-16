@@ -15,6 +15,7 @@ A web-based workplace dashboard for managing chatbot modules, user profiles, aut
   - Manage existing user accounts
 - **Attendance Tracking:** Track and manage employee attendance
 - **Payroll Management:** Handle employee payroll information
+- **Payroll Management (improved):** Front-end editable payroll table with CSV import/export, cents-safe payroll math (`js/payroll-utils.js`), attendance auto-fill, and server-side persistence of payroll runs (`POST /api/payrolls`). The payroll page includes a QR Dashboard quick link for admin workflows.
 - **Weather Information:** Display weather updates and forecasts
 - **Responsive Design:** Modern UI with gradient themes and interactive elements
 
@@ -45,6 +46,7 @@ javascript_website/
 │   ├── main.js
 │   ├── nav-control.js
 │   ├── node.js
+│   ├── payroll-utils.js
 │   ├── payroll.js
 │   ├── profile.js
 │   ├── qr.js
@@ -80,6 +82,13 @@ javascript_website/
    npm init -y
    npm install firebase firebase-admin express cors
    ```
+
+  Optional: install Firebase CLI globally (required for rule deploys and other firebase tasks):
+  ```powershell
+  npm install -g firebase-tools
+  # then login interactively
+  firebase login
+  ```
 
    Note: This will create a `node_modules` folder with all required dependencies. Do not commit this folder to version control.
 
@@ -141,11 +150,11 @@ javascript_website/
 
 8. **Set up Firestore Rules:**
    - Go to Firestore Database → Rules
-   - Replace with these rules:
+   - Replace with these rules (paste into the Firestore Rules editor or deploy from `firestore.rules`):
    ```
    rules_version = '2';
-   service cloud.firestore {
-     match /databases/{database}/documents {
+service cloud.firestore {
+  match /databases/{database}/documents {
 
     // Helper: check if user is signed in
     function isSignedIn() {
@@ -154,72 +163,118 @@ javascript_website/
 
     // Helper: check if user is admin
     function isAdmin() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     // Helper: check if user is an employee/staff
     function isEmployee() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'employee';
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'employee';
     }
 
-    // 🔹 Account Requests
+    // -------------------------
+    // Account requests (public create)
+    // -------------------------
     match /accountRequests/{requestId} {
-      // Anyone can submit a signup request
+      // Anyone may submit a signup request
       allow create: if true;
-      // Only admins can view or manage requests
+      // Only admins can read/update/delete requests
       allow read, update, delete: if isAdmin();
     }
 
-    // 🔹 User Profiles
+    // -------------------------
+    // Users collection
+    // -------------------------
     match /users/{userId} {
-      // All signed-in users can read basic profile info
+      // Signed-in users can read profiles (tweak if you want tighter privacy)
       allow read: if isSignedIn();
-      // Users can manage their own profile
-      allow create, update, delete: if request.auth.uid == userId;
-      // Admins can manage all profiles
-      allow read, write: if isAdmin();
+
+      // Create: allow a user to create their own profile document
+      allow create: if isSignedIn() && request.auth.uid == userId;
+
+      // Update/delete: owner or admin can modify
+      allow update, delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+
+      // Admins can also write to users collection
+      allow write: if isAdmin();
     }
 
-    // 🔹 Archived Users
+    // -------------------------
+    // Archived users (admin-only)
+    // -------------------------
     match /archivedUsers/{docId} {
       allow read, write: if isAdmin();
     }
 
-    // 🔹 Attendance
+    // -------------------------
+    // Attendance
+    // -------------------------
     match /attendance/{docId} {
+      // Signed-in users can read attendance (adjust if you prefer more restriction)
       allow read: if isSignedIn();
-      // Employees can write their own attendance
-      allow create, update: if request.auth.uid == resource.data.userId || isAdmin();
+
+      // Create: allow user to create their own attendance record (use request.resource for incoming data)
+      allow create: if isSignedIn() && (request.auth.uid == request.resource.data.userId || isAdmin());
+
+      // Update: owner or admin can update (resource exists on update)
+      allow update: if isSignedIn() && (request.auth.uid == resource.data.userId || isAdmin());
+
+      // Delete: admin-only
       allow delete: if isAdmin();
     }
 
-    // 🔹 Payroll
-    match /payroll/{docId} {
-      // Everyone can read their own payroll; admins can read all
-      allow read: if isAdmin() || resource.data.employeeId == request.auth.uid;
-      allow write, delete: if isAdmin();
+    // -------------------------
+    // Payroll runs (top-level collection "payrolls")
+    // -------------------------
+    match /payrolls/{payrollId} {
+      // Admins create payroll runs
+      allow create: if isAdmin();
+
+      // Read run metadata: admins or the creator
+      allow read: if isAdmin() || (resource.data.createdBy == request.auth.uid);
+
+      // Update/delete: admin only
+      allow update, delete: if isAdmin();
+
+      // Lines subcollection rules (see below)
+      match /lines/{lineId} {
+        // Admins can read all lines; employee can read their own line (document id = their uid)
+        allow read: if isAdmin() || (request.auth != null && request.auth.uid == lineId);
+
+        // Writes to payroll lines are admin-only (prevents users from spoofing lines)
+        allow create, update, delete: if isAdmin();
+      }
     }
 
-    // 🔹 Payroll Batches
+    // -------------------------
+    // Payroll batches (admin-only)
+    // -------------------------
     match /payrollBatches/{batchId} {
       allow read, write, delete: if isAdmin();
     }
 
-    // 🔹 Chatbot Inquiries
+    // -------------------------
+    // Chatbot inquiries
+    // -------------------------
     match /chatbot/{docId} {
-      // Any signed-in user (admin or employee) can read inquiries
-      allow read: if isAdmin() || isEmployee();
-      // Any signed-in user can create new chatbot inquiries
+      // Any signed-in user may create
       allow create: if isSignedIn();
-      // Only admins can edit or delete chatbot logs
+
+      // Admins and employees may read (adjust if needed)
+      allow read: if isAdmin() || isEmployee();
+
+      // Only admins can edit or delete
       allow update, delete: if isAdmin();
     }
-   }
-   }
 
-
+    // Default: deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+``` 
 
 9. **Add Authorized Domains:**
    - Go to Authentication → Settings → Authorized domains
@@ -266,5 +321,3 @@ MIT License
 ---
 
 **Made for Capstone Project 2025**
-
-
