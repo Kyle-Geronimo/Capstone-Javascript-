@@ -121,7 +121,7 @@ javascript_website/
 
   Start the admin server (from your project root). In PowerShell run:
   ```powershell
-  cd C:\Users\chaos\a\Version7\javascript_website
+  cd C:\Users\(your user name)\javascript_website
   node server.js
   ```
 
@@ -327,3 +327,4 @@ MIT License
 ---
 
 **Made for Capstone Project 2025**
+
