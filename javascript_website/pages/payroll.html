@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Payroll — HRIS</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+  <!-- Use your site's original stylesheet -->
+  <link rel="stylesheet" href="../css/styles.css">
+
+  <!-- Minimal local styles only for table spacing — nothing that touches header/nav -->
+  <style>
+    /* small, non-intrusive styles for payroll table only */
+    .payroll-actions { display:flex; gap:12px; margin-bottom:12px; align-items:center; flex-wrap:wrap; }
+    .payroll-actions .group { display:flex; gap:8px; align-items:center; }
+    .payroll-table input { width:110px; padding:6px; text-align:center; box-sizing:border-box; }
+    .payroll-table th, .payroll-table td { padding:8px; vertical-align:middle; border-bottom:1px solid #eee; font-size:0.95rem; }
+    .payroll-table { table-layout: fixed; width: 100%; border-collapse: collapse; }
+    .payroll-table td.username { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align:left; padding-left:8px; }
+    .action-btn { padding:8px 10px; border-radius:6px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+    .action-btn.primary { background:#0b76ef; color:#fff; border-color:#0b76ef; }
+    .input-small { width:78px; }
+    @media (max-width:1100px) { .payroll-table input { width:84px; } }
+    @media (max-width:800px) { .payroll-table { font-size:0.8rem; } .payroll-table input { width:64px; } }
+  </style>
+  <!-- Payroll table width override (added) -->
+  <style>
+    /* === OVERRIDE for payroll table width === */
+    #payrollTable {
+        width: 100% !important;
+        min-width: 100% !important;
+        table-layout: auto !important;
+        white-space: normal !important;
+    }
+
+    #payrollTable th,
+    #payrollTable td {
+        white-space: normal !important;      /* allow wrapping */
+        word-break: break-word !important;   /* prevent overflow */
+        text-align: center;                  /* cleaner layout */
+    }
+
+    /* reduce padding for tighter fit */
+    #payrollTable th,
+    #payrollTable td {
+        padding: 6px 8px !important;
+    }
+  </style>
+  <!-- Modal styles for SSS import preview -->
+  <style>
+    /* Modal styles (simple, responsive) */
+    .sss-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    .sss-modal {
+      width: min(1100px, 96%);
+      max-height: 90vh;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 18px 40px rgba(0,0,0,0.35);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .sss-modal-header {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:12px 16px;
+      border-bottom:1px solid #eee;
+      background:linear-gradient(90deg,#fafafa,#fff);
+    }
+    .sss-modal-title { font-weight:600; font-size:16px; }
+    .sss-modal-body {
+      padding:12px 16px;
+      overflow:auto;
+      flex:1;
+    }
+    .sss-modal-footer {
+      padding:10px 16px;
+      border-top:1px solid #eee;
+      display:flex;
+      justify-content:flex-end;
+      gap:8px;
+    }
+    .sss-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .sss-table th, .sss-table td { border:1px solid #eee; padding:8px; text-align:left; }
+    .sss-btn { background:#2563eb; color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; }
+    .sss-btn.secondary { background:#e5e7eb; color:#111; }
+    .sss-close { background:transparent; border:none; cursor:pointer; font-size:18px; }
+    .sss-status { margin-left:12px; color:#444; font-size:13px; }
+  </style>
+</head>
+<body>
+  <!-- === ORIGINAL HEADER / NAV preserved ===
+       This matches your project's header so styles and active nav behavior stay intact.
+       If you have a different header in your project file, copy/paste this same header block.
+  -->
+  <header>
+    <div class="container">
+      <h1>HotelLink</h1>
+      <nav>
+        <a href="../index.html" class="nav-btn">Home</a>
+        <a href="chatbot.html" class="nav-btn restricted">Chatbot Data</a>
+        <a href="admin.html" class="nav-btn restricted admin-only">Admin</a>
+        <a href="payroll.html" class="nav-btn restricted admin-only">Payroll</a>
+        <a href="profile.html" class="nav-btn restricted">Profile</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container page">
+    <h2>Payroll — Create Run</h2>
+
+    <div class="payroll-actions">
+      <div class="group">
+        <label>Period start: <input type="date" id="periodStart"></label>
+        <label>Period end: <input type="date" id="periodEnd"></label>
+        
+        <button id="loadUsersBtn" class="action-btn">Reload Table</button>
+
+        <label class="action-btn" style="display:inline-block; margin-left:8px; cursor:pointer;">
+          Import tabulation
+          <input id="importXlsx" type="file" accept=".xlsx,.xls" style="display:none" />
+        </label>
+        <span id="importStatus" class="sss-status"></span>
+        <button id="reloadSssTableBtn" class="action-btn" style="margin-left:8px">Reload SSS Table</button>
+
+        <!-- Modal / Popout -->
+        <div id="sssModalBackdrop" class="sss-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="sssModalTitle">
+          <div class="sss-modal" role="document">
+            <div class="sss-modal-header">
+              <div class="sss-modal-title" id="sssModalTitle">Import preview — SSS tabulation</div>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button id="sssModalClose" class="sss-close" title="Close (Esc)">✕</button>
+              </div>
+            </div>
+
+            <div class="sss-modal-body" id="sssModalBody">
+              <div id="sssPreviewInfo" style="margin-bottom:8px; color:#333; font-size:13px;"></div>
+              <div id="sssPreviewTableContainer"></div>
+              <div id="sssPreviewWarn" style="margin-top:10px; color:#b45309; font-size:13px; display:none;"></div>
+            </div>
+
+            <div class="sss-modal-footer">
+              <button id="sssCancelBtn" class="sss-btn secondary">Cancel</button>
+              <button id="sssConfirmBtn" class="sss-btn">Confirm & Save</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="group">
+        <button id="calculateBtn" class="action-btn">Calculate</button>
+      </div>
+
+      <div style="display: flex; gap: 1rem;">
+            <a href="qr-dashboard.html" class="action-btn">QR Dashboard</a>
+          </div>
+
+      <div class="group" style="margin-left:auto;">
+        <button id="saveRunBtn" class="action-btn primary">Save Payroll Run</button>
+        <button id="exportCsvBtn" class="action-btn">Export CSV</button>
+        <span class="small-note" style="align-self:center;margin-left:8px">Rows: <strong id="rowsCount">0</strong></span>
+      </div>
+    </div>
+
+    <div id="status" class="small-note" aria-live="polite"></div>
+
+    <div style="overflow:auto; margin-top:12px;">
+  <table class="data-table payroll-table" id="payrollTable" role="grid" aria-label="Payroll table">
+    <thead>
+      <tr>
+        <th style="min-width:40px;">#</th>
+        <th style="min-width:180px; white-space:normal;">Username</th>
+        <th style="min-width:120px; white-space:normal;">Rate/Day</th>
+        <th style="min-width:80px; white-space:normal;">Days</th>
+        <th style="min-width:120px; white-space:normal;">Hours (auto)</th>
+        <th style="min-width:100px; white-space:normal;">ND hrs</th>
+        <th style="min-width:120px; white-space:normal;">ND-on-OT hrs</th>
+        <th style="min-width:100px; white-space:normal;">OT hrs</th>
+        <th style="min-width:120px; white-space:normal;">RegHol hrs</th>
+        <th style="min-width:120px; white-space:normal;">SpecHol hrs</th>
+        <th style="min-width:130px; white-space:normal;">SSS (emp)</th>
+        <th style="min-width:150px; white-space:normal;">PhilHealth (emp)</th>
+        <th style="min-width:130px; white-space:normal;">Pag-IBIG (emp)</th>
+        <th style="min-width:130px; white-space:normal;">ST. PETER</th>
+        <th style="min-width:150px; white-space:normal;">SSS Salary Loan</th>
+        <th style="min-width:160px; white-space:normal;">HDMF Salary Loan</th>
+        <th style="min-width:170px; white-space:normal;">HDMF Calamity Loan</th>
+        <th style="min-width:130px; white-space:normal;">Cash Advance / Credit</th>
+        <th style="min-width:150px; white-space:normal;">UT / LATE (hrs)</th>
+        <th style="min-width:160px; white-space:normal;">UT / LATE AMOUNT</th>
+        
+        <th style="min-width:130px; white-space:normal;">Gross (auto)</th>
+        <th style="min-width:160px; white-space:normal;">Deductions (total auto)</th>
+        <th style="min-width:120px; white-space:normal;">Net (auto)</th>
+        <th style="min-width:140px; white-space:normal;">Note</th>
+      </tr>
+    </thead>
+    <tbody id="payrollBody"></tbody>
+  </table>
+</div>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>&copy; 2025 D’ Mariners Inn Hotel. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <!-- Keep your site's nav-control and firebase init behavior (path may differ in your project) -->
+  <script type="module" src="../js/nav-control.js"></script>
+  <script type="module" src="../js/firebase-config.js"></script>
+
+  <!-- include SheetJS (xlsx) CDN for client-side parsing -->
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/shim.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+  <!-- Payroll logic (module) — ensure this path matches your project structure -->
+  <script type="module" src="../js/payroll.js"></script>
+
+  <!-- Re-run any nav visibility helpers after load so header active-state is correct -->
+  <script>
+    // if you already have updateNavVisibility/highlightActiveNavBtn functions in nav-control.js
+    if (typeof updateNavVisibility === 'function') updateNavVisibility();
+    if (typeof highlightActiveNavBtn === 'function') highlightActiveNavBtn();
+  </script>
+</body>
+</html>

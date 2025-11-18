@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HotelLink - Archives</title>
+  <link rel="stylesheet" href="../css/styles.css">
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore-compat.js"></script>
+  <script type="module" src="../js/auth.js"></script>
+  <script type="module" src="../js/archives.js"></script>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <div style="display: flex; align-items: center; gap: 2rem;">
+        <a href="admin.html" class="nav-btn" style="background: #4f8cff; color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none;">← Back</a>
+        <h1>HotelLink</h1>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="form-container chatbot-data-container admin-dashboard">
+      <h2>Archives</h2>
+
+      <!-- Archived Users Section -->
+      <div class="admin-section">
+        <h3>Archived Users</h3>
+        <div class="accounts-panel">
+          <div id="archived-accounts" class="accounts-list">
+            <em>Loading archived accounts…</em>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+    <footer>
+    <div class="container">
+      <p>&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>
+    </div>
+  </footer>
+</body>
+</html>
