@@ -51,6 +51,7 @@ javascript_website/
 │   ├── profile.js
 │   ├── qr.js
 │   ├── show-password.js
+│   ├── sss-table.js
 │   └── weather.js
 ├── launch.json
 ├── mariners-hotellink-firebase-adminsdk-fbsvc-65bfc6c5b7.json
@@ -77,11 +78,15 @@ javascript_website/
 1. **Clone the repository** and open the folder in VS Code
 
 2. **Install Dependencies:**
-   ```bash
-   cd javascript_website
-   npm init -y
-   npm install firebase firebase-admin express cors
-   ```
+  ```bash
+  cd javascript_website
+  # If starting a new project
+  npm init -y
+  npm install firebase firebase-admin express cors
+
+  # If the repo already contains a `package.json`, simply install dependencies
+  npm install
+  ```
 
   Optional: install Firebase CLI globally (required for rule deploys and other firebase tasks):
   ```powershell
@@ -101,13 +106,13 @@ javascript_website/
 
 4. **Firebase Admin SDK Setup:**
    ```bash
-   # Install Firebase Admin SDK
+   # Install Firebase Admin SDK if not already installed
    npm install firebase-admin
    ```
    
-   Create a new file `server.js` in your project root
+   Ensure `server.js` exists in your project root (this repo already includes `server.js`).
 
-   Add this to your package.json:
+   Add this to your package.json if using ES module syntax:
    ```json
    {
      "type": "module"
@@ -116,17 +121,18 @@ javascript_website/
 
   Start the admin server (from your project root). In PowerShell run:
   ```powershell
-  cd C:\Users\chaos\a\Version6\javascript_website
+  cd C:\Users\chaos\a\Version7\javascript_website
   node server.js
   ```
 
 5. **Get Admin SDK Credentials:**
    - Go to Firebase Console → Project Settings → Service Accounts
    - Click "Generate New Private Key"
-   - Save the JSON file as `serviceAccountKey.json` in your project root
-   - Add to `.gitignore`:
+   - Save the JSON file as `serviceAccountKey.json` (or your provider-named JSON, e.g. `mariners-hotellink-firebase-adminsdk-fbsvc-65bfc6c5b7.json`) in your project root
+   - Add the credentials file to `.gitignore` (example names below):
      ```
      serviceAccountKey.json
+     mariners-hotellink-firebase-adminsdk-fbsvc-65bfc6c5b7.json
      node_modules/
      ```
 
