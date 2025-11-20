@@ -1842,6 +1842,200 @@ if (typeof exportCsvBtn !== 'undefined' && exportCsvBtn && exportCsvBtn.addEvent
   exportCsvBtn.addEventListener('click', exportCsv);
 }
 
+// --------------------------
+// Backcompat helpers for profile.html
+// --------------------------
+
+/**
+ * initializePayrollSystem(firebaseConfig?)
+ * Minimal initializer used by profile.html. Loads SSS table and holidays into module state.
+ */
+export async function initializePayrollSystem(/*firebaseConfig*/) {
+  try {
+    // Load SSS table if not already loaded
+    if (!sssTablePayload) {
+      try {
+        sssTablePayload = await getSssTable();
+      } catch (e) {
+        console.warn('initializePayrollSystem: getSssTable failed', e);
+      }
+    }
+
+    // load holidays (so computeForPeriod can use isRegHoliday/isSpecHoliday if needed)
+    try {
+      await loadHolidaysFromFirestore();
+    } catch (e) {
+      console.warn('initializePayrollSystem: loadHolidaysFromFirestore failed', e);
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('initializePayrollSystem error', err);
+    return false;
+  }
+}
+
+/**
+ * computeForPeriod(usersArray, dtrRows, month, period)
+ * Backwards-compatible wrapper to compute payroll for one or more users in the shape
+ * that profile.html expects.
+ *
+ * - usersArray: an array of user documents (plain objects, e.g. from Firestore .data())
+ * - dtrRows: array of attendance entries (plain objects)
+ * - month: 1..12 (string/number)
+ * - period: '1-15' or '16-end'
+ *
+ * Returns an array of payroll objects with these fields (used by profile.html):
+ * { basic, morningShiftDays, midShiftDays, nightShiftDays, otHours, otAmount,
+ *   regHolHours, regHolAmount, sssEmployee, philhealthEmployee, pagibigEmployee,
+ *   totalDeductions, gross, net }
+ */
+export function computeForPeriod(usersArray = [], dtrRows = [], month, period) {
+  // normalize month and compute date window
+  const mnum = Number(month) || (new Date()).getMonth() + 1;
+  const year = (new Date()).getFullYear();
+
+  let startDate, endDate;
+  if (String(period) === '1-15') {
+    startDate = new Date(year, mnum - 1, 1, 0, 0, 0, 0);
+    endDate = new Date(year, mnum - 1, 15, 23, 59, 59, 999);
+  } else { // '16-end' or other
+    startDate = new Date(year, mnum - 1, 16, 0, 0, 0, 0);
+    endDate = new Date(year, mnum - 1, new Date(year, mnum, 0).getDate(), 23, 59, 59, 999);
+  }
+
+  // helper to check if an attendance row falls in period
+  function inPeriod(att) {
+    try {
+      const ci = att.clockIn && (att.clockIn.toDate ? att.clockIn.toDate() : new Date(att.clockIn));
+      if (!ci || isNaN(ci.getTime())) return false;
+      return (ci >= startDate && ci <= endDate);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  const results = [];
+
+  for (const user of usersArray) {
+    // filter attendance rows for this user + period
+    const userRows = dtrRows.filter(r => {
+      try {
+        return (String(r.userId || r.user || '') === String(user.userId || user.id || user.uid || '')) && inPeriod(r);
+      } catch (e) { return false; }
+    });
+
+    // Aggregate days, hours, OT, shifts
+    let daysWorked = 0;
+    let hoursWorked = 0;
+    let otHours = 0;
+    let ndHours = 0;
+    let morningShiftDays = 0, midShiftDays = 0, nightShiftDays = 0;
+    let regHolHours = 0, regHolAmount = 0;
+
+    // Simple per-day aggregate: assume attendance entries include clockIn and clockOut
+    const perDay = {};
+    for (const a of userRows) {
+      const ci = a.clockIn && (a.clockIn.toDate ? a.clockIn.toDate() : new Date(a.clockIn));
+      const co = a.clockOut && (a.clockOut.toDate ? a.clockOut.toDate() : new Date(a.clockOut));
+      if (!ci || !co || co <= ci) continue;
+      const dayKey = `${ci.getFullYear()}-${String(ci.getMonth()+1).padStart(2,'0')}-${String(ci.getDate()).padStart(2,'0')}`;
+      const h = (co - ci) / (1000 * 60 * 60);
+      perDay[dayKey] = (perDay[dayKey] || 0) + h;
+
+      // basic ND detection (count segments that fall into ND window)
+      // approximate by sampling 15-minute slices (cheap and matches your file's approach)
+      let t = new Date(ci);
+      const last = new Date(co);
+      const stepMs = 15 * 60 * 1000;
+      while (t < last) {
+        const tNext = new Date(Math.min(t.getTime() + stepMs, last.getTime()));
+        const segHours = (tNext - t) / (1000 * 60 * 60);
+        if (isNightDiffTime(t)) ndHours += segHours;
+        t = tNext;
+      }
+
+      // count shift day by using stored user.shift if present (morning/mid/night)
+      const s = (user.shift || '').toLowerCase();
+      if (s === 'morning') morningShiftDays = morningShiftDays + 1;
+      else if (s === 'mid' || s === 'midday') midShiftDays = midShiftDays + 1;
+      else if (s === 'night') nightShiftDays = nightShiftDays + 1;
+    }
+
+    for (const dayKey of Object.keys(perDay)) {
+      const h = perDay[dayKey];
+      daysWorked += 1;
+      hoursWorked += h;
+      if (h > 8) otHours += (h - 8);
+    }
+
+    // Determine ratePerDay for this user (fallbacks)
+    const ratePerDay = Number(user.ratePerDay || user.baseRatePerDay || user.rate || 0);
+
+    // Estimate monthlySalary for statutory calculation only when there's work
+    const monthlySalaryEstimate = (daysWorked > 0 || hoursWorked > 0) ? (ratePerDay > 0 ? ratePerDay * 30 : (user.ratePerHour ? user.ratePerHour * 8 * 30 : null)) : null;
+    const sssOverride = monthlySalaryEstimate ? findSssFromPayload(monthlySalaryEstimate) : null;
+
+    // adjustmentsCents = 0 for simple compute; profile page won't pass loans here
+    const adjustmentsCents = 0;
+
+    // call computePayrollLine (existing core compute) to reuse statutory logic
+    // computePayrollLine expects named params - we give the ones we have
+    const calc = computePayrollLine({
+      ratePerDay: ratePerDay,
+      ratePerHour: (user.ratePerHour || null),
+      daysWorked,
+      hoursWorked,
+      ndHours,
+      ndOtHours: Math.min(ndHours || 0, otHours || 0),
+      otHours,
+      regHolidayHours: regHolHours,
+      specialHolidayHours: 0,
+      adjustmentsCents,
+      monthlySalary: monthlySalaryEstimate,
+      periodScaling: 1,
+      manualPagibig: (user.pagibig !== undefined ? user.pagibig : null),
+      sssOverride
+    });
+
+    // Pull statutory breakdown
+    const breakdown = (calc && calc.deductions && calc.deductions.breakdown) ? calc.deductions.breakdown : {};
+    const sssEmployee = (breakdown.sss_employee ?? breakdown.sss ?? 0);
+    const philhealthEmployee = (breakdown.phil_employee ?? breakdown.philhealth_employee ?? 0);
+    const pagibigEmployee = (breakdown.pagibig_employee ?? 0);
+    const totalDeductions = calc && calc.deductions ? (calc.deductions.total || 0) : 0;
+
+    // Build result mapping expected by profile.html
+    results.push({
+      userId: user.userId || user.id || user.uid || '',
+      basic: (ratePerDay ? (ratePerDay * daysWorked) : (calc ? (calc.basic || 0) : 0)),
+      morningShiftDays,
+      midShiftDays,
+      nightShiftDays,
+      otHours: Number((otHours || 0).toFixed(2)),
+      otAmount: calc ? (calc.ot || 0) : 0,
+      regHolHours,
+      regHolAmount: calc ? (calc.regularHolidayAmount || 0) : 0,
+      sssEmployee,
+      philhealthEmployee,
+      pagibigEmployee,
+      totalDeductions,
+      gross: calc ? (calc.gross || 0) : 0,
+      net: calc ? (calc.net || 0) : 0
+    });
+  }
+
+  return results;
+}
+
+// Expose on window for non-module pages (defensive)
+if (typeof window !== 'undefined') {
+  window.initializePayrollSystem = window.initializePayrollSystem || initializePayrollSystem;
+  window.computeForPeriod = window.computeForPeriod || computeForPeriod;
+}
+
+
+
 // Export hooks for testing/debugging
 export { loadUsersAndAttendance, loadAttendanceForRows, calculateAll, savePayrollRun, exportCsv };
 
