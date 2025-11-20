@@ -316,7 +316,7 @@ javascript_website/
   **Firestore Schema**
 
   - **`users` collection:** User profiles and roles. Pages: `signup.html`, `login.html`, `profile.html`, `admin.html`, `archives.html`.
-    - `displayName`: string
+    - `username`: string
     - `email`: string
     - `role`: string (e.g., `admin`, `employee`, `user`)
     - `photoURL`: string (URL)
@@ -438,3 +438,4 @@ MIT License
 ---
 
 **Made for Capstone Project 2025**
+
