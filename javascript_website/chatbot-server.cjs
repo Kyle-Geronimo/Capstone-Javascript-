@@ -11,7 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 // --- Configuration Check ---
-const requiredEnv = ['GEMINI_API_KEY', 'PAGE_ACCESS_TOKEN', 'VERIFY_TOKEN', 'GOOGLE_APPLICATION_CREDENTIALS', 'FIREBASE_PROJECT_ID'];
+const requiredEnv = ['GEMINI_API_KEY', 'PAGE_ACCESS_TOKEN', 'VERIFY_TOKEN'];
 const missingEnv = requiredEnv.filter(key => !process.env[key]);
 if (missingEnv.length > 0) {
   console.error(`❌ Missing required .env variables: ${missingEnv.join(', ')}`);
@@ -20,8 +20,8 @@ if (missingEnv.length > 0) {
 
 // --- 1. Initialize Firebase Admin (safe single-init) ---
 try {
-  const serviceAccountPath = path.resolve(__dirname, process.env.GOOGLE_APPLICATION_CREDENTIALS);
-
+  const serviceAccountPath = path.join(__dirname, 'mariners-hotellink-firebase-adminsdk-fbsvc-65bfc6c5b7.json');
+  
   if (!fs.existsSync(serviceAccountPath)) {
     throw new Error(`File not found at: ${serviceAccountPath}`);
   }
