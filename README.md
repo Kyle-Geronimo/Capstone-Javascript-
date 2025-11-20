@@ -156,8 +156,85 @@ javascript_website/
    - Download your service account key:
      - Go to Project Settings → Service accounts
      - Click "Generate new private key"
-     - Save as `serviceAccountKey.json` in your project root
+     - Save as `serviceAccountKey.json` (or a name you choose) in your project root
      - Add it to `.gitignore`
+
+  Important: change the default config values so the app connects to *your* Firebase project. Steps and examples below.
+
+  - Replace the web app config in `js/firebase-config.js`:
+
+    1. In Firebase Console go to Project Settings → General → Your apps → choose your web app or register a new one.
+    2. Copy the config object and paste it into `js/firebase-config.js`, replacing the existing `firebaseConfig` object. Example placeholder:
+
+    ```javascript
+    // js/firebase-config.js
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "your-project-id.firebaseapp.com",
+      projectId: "your-project-id",
+      storageBucket: "your-project-id.appspot.com",
+      messagingSenderId: "SENDER_ID",
+      appId: "APP_ID",
+      measurementId: "G-XXXXXXXX"
+    };
+    ```
+
+    - Make sure `projectId` and `storageBucket` match the values shown in your Firebase Project settings.
+
+  - Add or rename your Admin SDK JSON key for the server:
+
+    1. Download the service account JSON from Firebase Console → Project Settings → Service accounts → Generate new private key.
+    2. Place the downloaded file in the project root. Rename it to one of these recommended names (your choice): `serviceAccountKey.json` or `mariners-hotellink-firebase-adminsdk.json`.
+    3. Add that filename to `.gitignore` (already recommended above).
+
+    Example PowerShell commands to move and ignore the key (run from project root):
+
+    ```powershell
+    # move downloaded key from Downloads to project root (adjust filename as needed)
+    Move-Item -Path $env:USERPROFILE\Downloads\mariners-hotellink-firebase-adminsdk-*.json -Destination .\serviceAccountKey.json
+
+    # append to .gitignore (if not already present)
+    Add-Content -Path .gitignore -Value "serviceAccountKey.json"
+    ```
+
+  - Update `server.js` to point to your key name (if you renamed it):
+
+    - `server.js` contains a line similar to:
+      ```js
+      const saPath = join(__dirname, 'mariners-hotellink-firebase-adminsdk-fbsvc-65bfc6c5b7.json');
+      ```
+    - Change that filename to match the key you placed in the project root, for example:
+      ```js
+      const saPath = join(__dirname, 'serviceAccountKey.json');
+      ```
+
+    Quick PowerShell replace (runs a simple text replace in `server.js` — review after running):
+
+    ```powershell
+    (Get-Content server.js) -replace "mariners-hotellink-firebase-adminsdk-[^']+", 'serviceAccountKey.json' | Set-Content server.js
+    ```
+
+  - If you prefer environment variables instead of committing a filename, you can modify `server.js` to read a `SERVICE_ACCOUNT_FILE` env var and fall back to the existing filename. Example snippet to add near the top of `server.js`:
+
+    ```js
+    const saFile = process.env.SERVICE_ACCOUNT_FILE || 'serviceAccountKey.json';
+    const saPath = join(__dirname, saFile);
+    ```
+
+  - Final checks:
+    - Ensure `js/firebase-config.js` contains your web config and the file is saved.
+    - Ensure your service account JSON file exists in the project root and is ignored by git.
+    - Restart the admin server after changes:
+
+    ```powershell
+    cd C:\Users\chaos\a\Version9\javascript_website
+    node server.js
+    ```
+
+  - Troubleshooting tips:
+    - If the app fails to connect to Firestore or Auth, open browser console and check for network errors and config values.
+    - For server-side errors (service account or Admin SDK), check the terminal where `node server.js` is running; it will log missing/parse errors for the service account JSON.
+    - If you change projectId or other fields, also verify Firebase Console settings (Auth, Firestore, Storage) are enabled for that project.
 
 8. **Set up Firestore Rules:**
    - Go to Firestore Database → Rules
@@ -438,4 +515,3 @@ MIT License
 ---
 
 **Made for Capstone Project 2025**
-
