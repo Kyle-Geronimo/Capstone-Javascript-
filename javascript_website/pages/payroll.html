@@ -5,6 +5,8 @@
   <title>Payroll — HRIS</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="../css/styles.css">
+  <!-- Add UI improvements after base styles -->
+  <link rel="stylesheet" href="../css/payroll-enhancements.css">
 </head>
 <body>
   <header>
@@ -27,7 +29,7 @@
       <div class="group">
         <label>Period start: <input type="date" id="periodStart"></label>
         <label>Period end: <input type="date" id="periodEnd"></label>
-        
+
         <button id="loadUsersBtn" class="action-btn">Reload Table</button>
 
         <label class="action-btn file-import-label">
@@ -36,7 +38,6 @@
         </label>
         <span id="importStatus" class="sss-status"></span>
         <button id="reloadSssTableBtn" class="action-btn ml-8">Reload SSS Table</button>
-
 
         <div id="sssModalBackdrop" class="sss-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="sssModalTitle">
           <div class="sss-modal" role="document">
@@ -60,7 +61,7 @@
           </div>
         </div>
       </div>
-      
+
       <div class="group">
         <button id="calculateBtn" class="action-btn">Calculate</button>
       </div>
@@ -76,7 +77,7 @@
       </div>
     </div>
 
-    <!-- Holiday pickers: place this under payroll buttons -->
+    <!-- Holiday pickers: centered and fixed width -->
     <div id="holidayPickers" class="holiday-pickers">
       <div class="holiday-card">
         <h3>Regular Holidays</h3>
@@ -108,39 +109,39 @@
     <div id="status" class="small-note" aria-live="polite"></div>
 
     <div class="table-wrap">
-  <table class="data-table payroll-table" id="payrollTable" role="grid" aria-label="Payroll table">
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Username</th>
-        <th>Rate/Day</th>
-        <th>Days</th>
-        <th>Hours (auto)</th>
-        <th>ND hrs</th>
-        <th>ND-on-OT hrs</th>
-        <th>OT hrs</th>
-        <th>RegHol hrs</th>
-        <th>SpecHol hrs</th>
-        <th>SSS (emp)</th>
-        <th>PhilHealth (emp)</th>
-        <th>Pag-IBIG (emp)</th>
-        <th>ST. PETER</th>
-        <th>SSS Salary Loan</th>
-        <th>SSS Calamity Loan</th>
-        <th>HDMF Salary Loan</th>
-        <th>HDMF Calamity Loan</th>
-        <th>Cash Advance / Credit</th>
-        <th>UT / LATE (hrs)</th>
-        <th>UT / LATE AMOUNT</th>
-        <th>Gross (auto)</th>
-        <th>Deductions (total auto)</th>
-        <th>Net (auto)</th>
-        <th>Note</th>
-      </tr>
-    </thead>
-    <tbody id="payrollBody"></tbody>
-  </table>
-  </div>
+      <table class="data-table payroll-table" id="payrollTable" role="grid" aria-label="Payroll table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Username</th>
+            <th>Rate/Day</th>
+            <th>Days</th>
+            <th>Hours (auto)</th>
+            <th>ND hrs</th>
+            <th>ND-on-OT hrs</th>
+            <th>OT hrs</th>
+            <th>RegHol hrs</th>
+            <th>SpecHol hrs</th>
+            <th>SSS (emp)</th>
+            <th>PhilHealth (emp)</th>
+            <th>Pag-IBIG (emp)</th>
+            <th>ST. PETER</th>
+            <th>SSS Salary Loan</th>
+            <th>SSS Calamity Loan</th>
+            <th>HDMF Salary Loan</th>
+            <th>HDMF Calamity Loan</th>
+            <th>Cash Advance / Credit</th>
+            <th>UT / LATE (hrs)</th>
+            <th>UT / LATE AMOUNT</th>
+            <th>Gross (auto)</th>
+            <th>Deductions (total auto)</th>
+            <th>Net (auto)</th>
+            <th>Note</th>
+          </tr>
+        </thead>
+        <tbody id="payrollBody"></tbody>
+      </table>
+    </div>
   </main>
 
   <footer>
@@ -154,9 +155,23 @@
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/shim.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <script type="module" src="../js/payroll.js"></script>
+
+  <!-- Include the small UI enhancement script AFTER payroll.js (rebind helper exposed by payroll-ui.js) -->
+  <script type="module" src="../js/payroll-ui.js"></script>
+
   <script>
+    // ensure nav visibility helpers run if available
     if (typeof updateNavVisibility === 'function') updateNavVisibility();
     if (typeof highlightActiveNavBtn === 'function') highlightActiveNavBtn();
+
+    // if payroll.js re-renders the table after async load, rebind UI hooks
+    // (payroll.js already exposes window.rebindPayrollUI in payroll-ui.js)
+    // call it once page is ready
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof window.rebindPayrollUI === 'function') window.rebindPayrollUI();
+      // also call after a short delay to catch async renders
+      setTimeout(() => { if (typeof window.rebindPayrollUI === 'function') window.rebindPayrollUI(); }, 800);
+    });
   </script>
 </body>
 </html>

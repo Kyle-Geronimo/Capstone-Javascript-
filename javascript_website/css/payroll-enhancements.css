@@ -1,0 +1,221 @@
+/* Payroll page UI enhancements
+   - Larger, more readable inputs
+   - Sticky header + sticky first columns
+   - Zebra rows, subtle shadows
+   - Centered holiday pickers and fixed calendar layout
+*/
+
+/* Table polish */
+.data-table.payroll-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  background: transparent;
+  overflow: visible;
+}
+
+/* Sticky header */
+.data-table.payroll-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: linear-gradient(180deg,#fbfdff,#fff);
+  box-shadow: 0 4px 8px rgba(14,30,62,0.04);
+  padding: 12px 10px;
+  text-align: left;
+  font-weight: 700;
+  color: #123a80;
+}
+
+/* Row height and zebra */
+.data-table.payroll-table tbody tr {
+  height: 56px; /* taller rows for touch */
+  transition: background 140ms ease, transform 140ms ease;
+}
+.data-table.payroll-table tbody tr:nth-child(odd) {
+  background: rgba(79,140,255,0.02);
+}
+.data-table.payroll-table tbody tr:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(14,30,62,0.04);
+}
+
+/* Sticky first two columns (index and username) */
+.data-table.payroll-table th:first-child,
+.data-table.payroll-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 11;
+  background: linear-gradient(90deg,#fff,#fbfdff);
+  border-right: 1px solid rgba(0,0,0,0.04);
+  min-width: 48px;
+  width: 48px;
+  text-align: center;
+}
+.data-table.payroll-table th:nth-child(2),
+.data-table.payroll-table td:nth-child(2) {
+  position: sticky;
+  left: 48px; /* width of first column */
+  z-index: 11;
+  background: linear-gradient(90deg,#fff,#fbfdff);
+  border-right: 1px solid rgba(0,0,0,0.04);
+  min-width: 220px;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Inputs: make them larger and friendlier */
+.input-small {
+  width: 92px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(31,78,166,0.08);
+  background: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+  font-size: 0.95rem;
+  text-align: center;
+  transition: box-shadow 120ms ease, transform 120ms ease, border-color 120ms ease;
+  height: 40px;
+  box-sizing: border-box;
+}
+
+/* Default single-line inputs (notes etc) */
+.table-wrap input[data-field="note"],
+.table-wrap input[data-field="note"] {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(31,78,166,0.06);
+  background: #fff;
+  min-height: 40px;
+  text-align: left;
+  font-size: 0.95rem;
+}
+
+/* Larger control for gross/net placeholders so they read more clearly */
+.table-wrap input[placeholder] {
+  color: #475569;
+}
+
+/* Focus states: strong visible ring for keyboard users */
+.input-small:focus,
+.table-wrap input:focus,
+.table-wrap select:focus,
+.button:focus {
+  outline: none;
+  border-color: rgba(79,140,255,0.9);
+  box-shadow: 0 6px 18px rgba(79,140,255,0.12);
+  transform: translateY(-1px);
+}
+
+/* Make action buttons within table rows more touch-friendly */
+.action-btn.small {
+  padding: 8px 10px;
+  border-radius: 8px;
+  min-height: 38px;
+}
+
+/* Table cell padding */
+.data-table.payroll-table td {
+  padding: 8px 10px;
+  vertical-align: middle;
+}
+
+/* Ensure the big payroll table container allows horizontal scroll on small screens */
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 12px;
+  padding: 4px;
+  background: linear-gradient(180deg,#fff,#fbfdff);
+  border: 1px solid rgba(31,78,166,0.04);
+  box-shadow: 0 8px 24px rgba(14,30,62,0.04);
+}
+
+/* Holiday pickers layout: center and align cards */
+#holidayPickers {
+  display: flex;
+  justify-content: center;      /* center horizontally */
+  gap: 16px;
+  align-items: flex-start;      /* keep controls aligned at top */
+  flex-wrap: wrap;
+  margin: 1rem 0 1.25rem;
+}
+
+/* Make each holiday-card same width and center its internal elements */
+.holiday-card {
+  width: 340px;
+  max-width: calc(50% - 16px);
+  min-width: 280px;
+  box-sizing: border-box;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Small calendar should be centered inside the card */
+.small-calendar {
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Month label alignment in calendar controls */
+.calendar-actions {
+  display:flex;
+  gap:8px;
+  align-items:center;
+  justify-content:center;
+}
+
+/* Buttons in calendar controls normalized size */
+.calendar-actions button {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid rgba(31,78,166,0.06);
+}
+
+/* Status area alignment */
+#holidayStatus {
+  text-align:center;
+  margin-top: 8px;
+  color: #1f4ea6;
+  font-weight: 600;
+}
+
+/* Smaller screens: stack holiday pickers full width */
+@media (max-width: 880px) {
+  #holidayPickers {
+    justify-content: center;
+  }
+  .holiday-card {
+    width: calc(100% - 32px);
+    max-width: 640px;
+  }
+  .data-table.payroll-table thead th {
+    padding: 10px 6px;
+    font-size: 0.95rem;
+  }
+  .input-small { width: 78px; height: 36px; padding: 8px 10px; font-size: 0.92rem; }
+}
+
+/* Minor visual polish for the export/save group */
+.payroll-actions .group.ml-auto {
+  display:flex;
+  align-items:center;
+  gap: 8px;
+}
+
+/* Make the CSV/Save buttons visually prominent.
+   These override the very small default action-btn size in some contexts */
+.action-btn.primary {
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+/* Tiny helper: make clickable table rows show pointer on hover where applicable */
+.data-table.payroll-table tbody tr.clickable-row { cursor: pointer; }

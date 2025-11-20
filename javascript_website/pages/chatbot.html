@@ -22,10 +22,46 @@
   </header>
 
   <main>
-    <div class="chatbot-data-container">
-      <div id="chatbot-data"></div>
-    </div>
-  </main>
+    <div class="chatbot-data-container page-wrap">
+  <div class="chatbot-panel">
+    <aside class="chat-filters">
+      <div class="filters-inner">
+        <h3>Inquiries</h3>
+        <div class="search-wrap">
+          <input id="chat-search" type="search" placeholder="Search by guest, message, or id" />
+        </div>
+        <div class="filter-chips">
+          <button class="chip active" data-filter="all">All</button>
+          <button class="chip" data-filter="unread">Unread</button>
+          <button class="chip" data-filter="booking">Booking</button>
+          <button class="chip" data-filter="amenities">Amenities</button>
+        </div>
+        <div class="quick-stats">
+          <div class="stat"><strong id="total-count">0</strong><span>Total</span></div>
+          <div class="stat"><strong id="unread-count">0</strong><span>Unread</span></div>
+        </div>
+      </div>
+    </aside>
+
+    <section class="chat-list-wrap">
+      <div class="list-header">
+        <h2>Recent Inquiries</h2>
+        <div class="list-actions">
+          <button id="refresh-btn" title="Refresh">⟳</button>
+        </div>
+      </div>
+
+      <ul id="chatbot-data" class="chat-list" aria-live="polite">
+        <!-- JS will inject <li class="chat-item"> entries here -->
+      </ul>
+
+      <div class="empty-state" hidden id="empty-state">
+        <p>No inquiries yet — try refreshing.</p>
+      </div>
+    </section>
+  </div>
+</div>
+
     <footer>
     <div class="container">
       <p>&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>

@@ -1,7 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+
 /* Base Styles */
 html, body {
     height: 100%;
 }
+
 
 /* User Management Styles */
 .user-item {
@@ -540,7 +543,7 @@ nav { display: flex; align-items: center; gap: 1.5rem; }
 
 body {
     margin: 0;
-    font-family: 'Segoe UI', Arial, sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     background: #f4f6fb;
     color: #222;
     min-height: 100vh;
@@ -644,8 +647,9 @@ header {
   background: #ffffff;
   border-radius: 12px;
   padding: 1.5rem;
-  box-shadow: 0 10px 30px rgba(14, 30, 62, 0.06);
-  border: 1px solid rgba(31,78,166,0.04);
+  /* UPDATED SHADOW */
+  box-shadow: 0 15px 40px rgba(14, 30, 62, 0.1); /* Deeper shadow */
+  border: 1px solid rgba(31,78,166,0.06); /* Slightly stronger border */
 }
 
 .auth-page.login-page .form-container h2,
@@ -1658,7 +1662,9 @@ button[id*="check-out"] {
 
 .form-container .action-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(79,140,255,0.2);
+  /* UPDATED SHADOW & TRANSITION */
+  box-shadow: 0 8px 16px rgba(79,140,255,0.3); /* Stronger shadow */
+  transition: all 0.15s ease-out; /* Quicker feedback */
 }
 
 /* Links styling */
@@ -2733,7 +2739,7 @@ h3.period-header {
 
 /* Page container and layout */
 .utility-page {
-    font-family: 'Inter', system-ui, Arial, sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     background: #f4f6fb;
     color: #222;
     min-height: 100vh;
@@ -3289,7 +3295,7 @@ h3.period-header {
 
 /* Reset Password Page Styles */
 body {
-    font-family: Arial, sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     padding: 24px;
 }
 

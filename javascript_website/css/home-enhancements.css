@@ -1,0 +1,410 @@
+/* Home page enhancements: hero, features grid, quicklinks
+   Updated to place weather cards at bottom and render them horizontally
+   when screen width allows. */
+
+/* Hero and features (unchanged from previous) */
+.home-hero {
+  padding: 3rem 0;
+  background: linear-gradient(180deg, rgba(79,140,255,0.04), rgba(110,214,255,0.02));
+  border-bottom: 1px solid rgba(31,78,166,0.03);
+}
+.home-hero .hero-inner {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 2rem;
+  align-items: start;
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+}
+.hero-copy h2 {
+  margin: 0 0 8px 0;
+  color: #0f1724;
+  font-size: 1.9rem;
+  line-height: 1.08;
+}
+.hero-copy .lead {
+  margin: 0 0 18px 0;
+  color: #475569;
+  max-width: 56ch;
+}
+.hero-ctas {
+  display:flex;
+  gap:12px;
+  margin-bottom: 14px;
+}
+.action-btn.primary {
+  background: linear-gradient(90deg, #4f8cff, #6ed6ff);
+  color: white;
+  font-weight: 700;
+  padding: 12px 18px;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(79,140,255,0.12);
+}
+.action-btn.secondary {
+  background: #fff;
+  color: #1f4ea6;
+  border: 1px solid rgba(31,78,166,0.08);
+  padding: 10px 16px;
+  border-radius: 10px;
+}
+
+/* Trust features under CTA */
+.trust-features {
+  list-style:none; padding:0; margin:0; display:flex; gap:12px; margin-top:8px; flex-wrap:wrap;
+}
+.trust-features li { color:#64748b; font-weight:600; font-size:0.95rem; }
+
+/* Features grid */
+.home-features { padding: 2.25rem 0; }
+.home-features .container { max-width: 1100px; margin: 0 auto; }
+.features-grid {
+  display:grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem;
+}
+.feature-card {
+  padding: 18px;
+  border-radius: 12px;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
+  min-height:120px;
+  box-shadow: 0 6px 24px rgba(14,30,62,0.04);
+  border: 1px solid rgba(31,78,166,0.04);
+  background: linear-gradient(180deg,#fff,#fbfdff);
+}
+.feature-card:hover { transform: translateY(-6px); box-shadow: 0 16px 40px rgba(14,30,62,0.08); }
+.feature-icon { width:28px; height:28px; color:#1f4ea6; margin-top:4px; }
+
+/* Quicklinks row */
+.home-quicklinks { padding: 1.5rem 0 2rem 0; }
+.quicklinks-row {
+  display:flex;
+  gap: 12px;
+  max-width: 1100px;
+  margin: 0 auto;
+  align-items:stretch;
+}
+.quicklink {
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  padding: 14px;
+  border-radius: 12px;
+  text-decoration:none;
+  color: inherit;
+  border: 1px solid rgba(31,78,166,0.04);
+  background: linear-gradient(180deg,#fff,#fbfdff);
+  box-shadow: 0 8px 24px rgba(14,30,62,0.04);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+.quicklink:hover { transform: translateY(-6px); box-shadow: 0 16px 40px rgba(14,30,62,0.06); }
+.quicklink strong { font-size:1rem; color:#0f1724 }
+
+/* WEATHER ROW: horizontal layout, responsive overflow and spacing */
+.home-weather {
+  padding: 1.5rem 0 3rem 0;
+  background: transparent;
+}
+.home-weather .container { max-width: 1100px; margin: 0 auto; }
+
+/* Horizontal weather grid (primary change) */
+.weather-grid.horizontal {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(180px, 1fr);
+  gap: 12px;
+  align-items: start;
+  /* allow horizontal scrolling on narrow viewports while keeping cards equal width */
+  overflow-x: auto;
+  padding-bottom: 6px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* make each weather card visually consistent (card classname used by weather.js) */
+.weather-grid.horizontal .card {
+  min-width: 180px; /* ensure visible baseline size */
+  max-width: 320px;
+  padding: 12px;
+  border-radius: 10px;
+  background: linear-gradient(180deg,#fff,#fbfdff);
+  box-shadow: 0 10px 30px rgba(14,30,62,0.06);
+  border: 1px solid rgba(31,78,166,0.04);
+}
+
+/* On larger screens we'll use a more typical grid (desktop: multiple columns without scroll) */
+@media (min-width: 980px) {
+  .weather-grid.horizontal {
+    grid-auto-flow: initial;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    overflow-x: visible;
+  }
+  .weather-grid.horizontal .card { min-width: auto; }
+}
+
+/* Fallback compact variant (if used elsewhere) */
+.weather-grid.compact { display:grid; grid-template-columns: 1fr; gap:8px; }
+
+/* Responsive adjustments */
+@media (max-width: 760px) {
+  .home-hero .hero-inner { grid-template-columns: 1fr; }
+  .features-grid { grid-template-columns: repeat(2, 1fr); }
+  .features-grid .feature-card { min-height: auto; }
+  .quicklinks-row { flex-direction: column; }
+  .hero-copy h2 { font-size: 1.6rem; }
+  /* On very small screens, make weather cards stack vertically for readability */
+  .weather-grid.horizontal {
+    grid-auto-flow: row;
+    grid-template-columns: 1fr;
+    overflow-x: visible;
+  }
+}
+
+/* Minor polish for section titles */
+.section-title { color:#1f4ea6; margin-bottom:12px; font-size:1.25rem; }
+
+/* small utilities */
+.muted { color:#64748b; }
+.small { font-size:0.9rem; }
+
+/* Animation Keyframes */
+@keyframes fadeInSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Base state for all animated elements (hidden/initial position) */
+.animate-on-scroll {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+
+/* When the element is intersecting (in view), apply the animation */
+.animate-on-scroll.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ------------------------------------------- */
+/* Apply Base State to Specific Elements */
+/* ------------------------------------------- */
+
+/* HERO Content (Hero Copy, CTAs, Features) */
+.home-hero .hero-copy > * {
+  /* Selects h2, p.lead, .hero-ctas, .trust-features */
+  /* This prevents having to add the class to every single child */
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+/* Hero Panel/Illustration */
+.hero-panel {
+  opacity: 0;
+  transform: scale(0.95);
+  transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+}
+
+/* Feature Cards (Apply base to each one) */
+.feature-card {
+  opacity: 0;
+  transform: translateY(20px);
+}
+/* Quicklinks (Apply base to each one) */
+.quicklink {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+/* Animation on View (Targeted for the JS) */
+.home-hero .hero-copy.is-visible > *,
+.hero-panel.is-visible,
+.feature-card.is-visible,
+.quicklink.is-visible {
+  opacity: 1;
+  transform: none;
+  animation: none; /* We use the transition on the base state now */
+}
+
+/* Add staggered delays to Hero copy elements */
+.home-hero .hero-copy h2 { transition-delay: 0.1s; }
+.home-hero .hero-copy .lead { transition-delay: 0.2s; }
+.home-hero .hero-ctas { transition-delay: 0.3s; }
+.home-hero .trust-features { transition-delay: 0.4s; }
+
+/* Add staggered delays to Feature Cards (in home-features) */
+.features-grid .feature-card:nth-child(1) { transition-delay: 0.1s; }
+.features-grid .feature-card:nth-child(2) { transition-delay: 0.2s; }
+.features-grid .feature-card:nth-child(3) { transition-delay: 0.3s; }
+.features-grid .feature-card:nth-child(4) { transition-delay: 0.4s; }
+
+/* Add staggered delays to Quick Links */
+.quicklinks-row .quicklink:nth-child(1) { transition-delay: 0.1s; }
+.quicklinks-row .quicklink:nth-child(2) { transition-delay: 0.2s; }
+.quicklinks-row .quicklink:nth-child(3) { transition-delay: 0.3s; }
+
+/* --- New Styling for Promotional Feature Boxes --- */
+
+.hero-trust-grid {
+    /* Create a responsive grid layout */
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); 
+    gap: 12px;
+    margin-top: 30px; /* Space between CTAs and feature grid */
+}
+
+.trust-card {
+    /* Uses existing .card for base styles (shadow/background) */
+    padding: 16px 18px;
+    text-align: left;
+    border-radius: 10px;
+    
+    /* Promotional Styling */
+    background: linear-gradient(180deg, #fff, #f7f9ff); /* Light gradient for depth */
+    border: 1px solid rgba(79, 140, 255, 0.12); /* Subtle blue border */
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.trust-card:hover {
+    transform: translateY(-2px); /* Lift effect */
+    box-shadow: 0 8px 18px rgba(14, 30, 62, 0.08);
+}
+
+.trust-card h4 {
+    margin: 0 0 4px 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #102a54; /* Darker text for focus */
+    display: flex;
+    align-items: center;
+    gap: 8px; /* Space between icon/emoji and text */
+}
+
+.trust-card p {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+/* Mobile adjustments */
+@media (max-width: 520px) {
+    .hero-trust-grid {
+        /* Stack the cards on small phones */
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Chatbot viewer enhancements - paste after other CSS so it takes precedence */
+
+/* Page background + container */
+.chatbot-page {
+  background: linear-gradient(180deg,#f6f9ff 0%, #ffffff 100%);
+  min-height: calc(100vh - 140px);
+  padding: 28px 18px;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+/* Panel layout */
+.chatbot-panel {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 18px;
+  max-width: 1200px;
+  margin: 0 auto;
+  align-items: start;
+}
+
+/* Filters (left) */
+.chat-filters .filters-inner {
+  position: sticky;
+  top: 88px;
+  background: linear-gradient(180deg,#fff,#fbfdff);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid rgba(31,78,166,0.04);
+  box-shadow: 0 10px 30px rgba(14,30,62,0.04);
+}
+.chat-filters h3 { margin:0 0 10px 0; color:#0f1724; font-size:1.1rem; }
+.search-wrap input#chat-search {
+  width:100%;
+  padding:10px 12px;
+  border-radius:10px;
+  border:1px solid rgba(31,78,166,0.06);
+  outline: none;
+  font-size:0.95rem;
+  box-shadow: inset 0 1px 0 rgba(14,30,62,0.02);
+}
+.filter-chips { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.chip {
+  background:transparent;
+  border:1px solid rgba(31,78,166,0.06);
+  padding:8px 10px;
+  border-radius:999px;
+  font-weight:600;
+  cursor:pointer;
+}
+.chip.active {
+  background: linear-gradient(90deg,#4f8cff,#6ed6ff);
+  color:white; border-color:transparent;
+  box-shadow: 0 8px 20px rgba(79,140,255,0.12);
+}
+
+/* quick-stats */
+.quick-stats { display:flex; gap:10px; margin-top:10px; }
+.quick-stats .stat { background: linear-gradient(180deg,#fff,#fbfdff); padding:8px 10px; border-radius:8px; text-align:center; min-width:68px; border:1px solid rgba(31,78,166,0.03); }
+.quick-stats .stat strong { display:block; font-size:1rem; color:#0f1724; }
+
+/* Right: list */
+.chat-list-wrap { background: transparent; }
+.list-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px; }
+.list-header h2 { margin:0; color:#0f1724; font-size:1.15rem; }
+.list-actions button { border:none; background:transparent; cursor:pointer; font-size:1.05rem; padding:6px 8px; }
+
+/* chat items */
+.chat-list { list-style:none; padding:0; margin:0; display:block; }
+.chat-item {
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
+  background: linear-gradient(180deg,#fff,#fbfdff);
+  padding:12px;
+  border-radius:10px;
+  border:1px solid rgba(31,78,166,0.04);
+  margin-bottom:10px;
+  box-shadow: 0 8px 20px rgba(14,30,62,0.03);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+  cursor:pointer;
+}
+.chat-item:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(14,30,62,0.06); }
+
+/* avatar & content */
+.chat-item .avatar {
+  width:44px; height:44px; border-radius:10px; flex:0 0 44px; display:inline-grid; place-items:center; font-weight:700; color:white;
+  background: linear-gradient(135deg,#4f8cff,#6ed6ff);
+}
+.chat-item .content { flex:1; min-width:0; }
+.chat-item .meta { display:flex; justify-content:space-between; gap:12px; align-items:start; }
+.chat-item .title { font-weight:700; color:#0f1724; font-size:0.98rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.chat-item .snippet { color:#475569; font-size:0.92rem; margin-top:6px; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.chat-item .time { font-size:0.85rem; color:#64748b; min-width:66px; text-align:right; }
+
+/* badges */
+.badge { font-size:0.78rem; padding:6px 8px; border-radius:999px; background:rgba(31,78,166,0.08); color:#123a80; font-weight:700; }
+
+/* empty state */
+.empty-state { text-align:center; padding:28px; color:#64748b; }
+
+/* Responsive */
+@media (max-width:920px) {
+  .chatbot-panel { grid-template-columns: 1fr; }
+  .chat-filters .filters-inner { position: relative; top: auto; }
+  .chat-item .time { text-align:left; }
+}

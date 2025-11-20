@@ -1,0 +1,77 @@
+/* auth-extras.css (tiny additions) */
+.auth-split {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  gap: 2rem;
+  align-items: center;
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.auth-hero {
+  background: linear-gradient(180deg, rgba(79,140,255,0.06), rgba(110,214,255,0.03));
+  border: 1px solid rgba(79,140,255,0.06);
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 10px 30px rgba(14,30,62,0.04);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height: 420px;
+}
+
+.hero-inner {
+  text-align: left;
+  width: 100%;
+}
+
+.hero-logo { width:110px; display:block; margin-bottom:12px; }
+.auth-hero h1 { margin:0; color:#102a54; font-size:1.6rem; font-weight:700; }
+.hero-sub { color:#4b5b7a; margin-top:8px; margin-bottom:18px; }
+.hero-illustration { width:100%; max-width:260px; display:block; margin: 10px 0 18px; opacity:0.98; }
+
+.hero-features { list-style:none; padding:0; margin:0; display:grid; gap:8px 0; }
+.hero-features li { display:flex; gap:8px; align-items:center; color:#123a80; font-weight:600; }
+.hero-features li::before { content:"✓"; color:#2e7d32; margin-right:8px; font-weight:700; }
+
+.auth-form-col { display:flex; align-items:center; justify-content:center; min-height:420px; }
+
+/* --- NEW STYLES BELOW --- */
+
+/* 1. Input Icon Wrapper Styling */
+.input-with-icon {
+  position: relative;
+  display: flex; 
+  align-items: center;
+}
+
+.input-with-icon .icon {
+  position: absolute;
+  left: 16px; /* Position icon inside the input field */
+  color: #94a3b8; /* Subtle grey color */
+  font-size: 1.1rem;
+  z-index: 10;
+}
+
+.input-with-icon .form-control {
+  /* Pushes the input text away from the icon */
+  padding-left: 45px !important; 
+}
+
+/* 2. Responsive adjustment for tablets: collapse the split layout */
+@media (max-width: 900px) {
+  .auth-split {
+    grid-template-columns: 1fr; /* Single column layout */
+    max-width: 600px; /* Center and constrain the content */
+  }
+
+  .auth-hero {
+    /* Hide the hero column entirely on smaller devices to save space */
+    display: none; 
+  }
+
+  .auth-form-col {
+    min-height: auto; /* Allow the form to shrink */
+  }
+}
