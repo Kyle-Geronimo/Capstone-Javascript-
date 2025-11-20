@@ -25,9 +25,16 @@ try {
 }
 
 try {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-  });
+ // Safe initialize: only initialize once per process
+  if (!admin.apps || admin.apps.length === 0) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+      // The projectId line is REMOVED, forcing the SDK to infer it from the key.
+    });
+    console.log('✅ Firebase Auth initialized.');
+  } else {
+    console.log('ℹ️ Firebase already initialized — reusing existing app.');
+  }
   console.log('Firebase Admin initialized. project_id=' + (serviceAccount.project_id || '<none>'));
 } catch (err) {
   console.error('admin.initializeApp failed:', err);

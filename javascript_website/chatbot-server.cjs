@@ -938,7 +938,7 @@ ${userMessage}
 
 
 // Start Server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log('\n---------------------------------------');
   console.log(`🚀 Server running locally on Port ${PORT}`);
   console.log('⚠️  To test with Messenger, ensure Ngrok is running!');
