@@ -21,7 +21,7 @@ if (missingEnv.length > 0) {
 // --- 1. Initialize Firebase Admin (safe single-init) ---
 try {
   const serviceAccountPath = path.join(__dirname, 'mariners-hotellink-firebase-adminsdk-fbsvc-65bfc6c5b7.json');
-  
+
   if (!fs.existsSync(serviceAccountPath)) {
     throw new Error(`File not found at: ${serviceAccountPath}`);
   }
@@ -31,8 +31,7 @@ try {
   // Safe initialize: only initialize once per process
   if (!admin.apps || admin.apps.length === 0) {
     admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-      projectId: process.env.FIREBASE_PROJECT_ID || serviceAccount.project_id
+      credential: admin.credential.cert(serviceAccount)
     });
     console.log('✅ Firebase Auth initialized.');
   } else {
