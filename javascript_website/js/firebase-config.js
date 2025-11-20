@@ -38,3 +38,17 @@ export async function getUserRole(uid) {
     return null;
   }
 }
+
+// --- ADD: expose auth/db/storage as legacy globals for pages that poll window.auth/window.db ---
+if (typeof window !== 'undefined') {
+  try {
+    window.auth = auth;
+    window.db = db;
+    window.storage = storage;
+    // small helper to detect firebase ready from non-module scripts
+    window.__firebase_ready = true;
+    console.log('firebase-config: exposed auth, db, storage on window');
+  } catch (e) {
+    console.warn('firebase-config: could not expose globals', e);
+  }
+}

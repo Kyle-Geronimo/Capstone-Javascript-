@@ -5,8 +5,13 @@ import {
   query,
   orderBy,
   doc,
-  updateDoc
+  updateDoc,
+  getDoc,
+  where,
+  addDoc,
+  serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
+import { evaluateForUser } from './payroll-utils.js';
 
 // API base (matches pattern used in admin.js)
 const API_BASE = (window.API_BASE && window.API_BASE.replace(/\/$/, '')) || 'http://localhost:3000';
@@ -24,6 +29,7 @@ const qrPreview = document.getElementById('qrPreview');
 const downloadBtn = document.getElementById('downloadBtn');
 const printBtn = document.getElementById('printBtn');
 const status = document.getElementById('status');
+const nameField = document.getElementById('nameField') || document.getElementById('name');
 
 // -------------------- SCANNER UI refs (kept from original) --------------------
 const cameraList = document.getElementById('cameraList');
@@ -104,99 +110,51 @@ if (employeeSelect) {
 
 // -------------------- Generator submit handler --------------------
 if (createForm) {
-  createForm.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
+  createForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const uid = employeeSelect.value || null;
+    const name = uid ? (usersMap.get(uid)?.username || '') : (nameField?.value || '');
+    const roleVal = roleField?.value || '';
+    const deptVal = departmentSelect?.value || '';
+    const shiftVal = shiftSelect?.value || '';
 
-    const uid = employeeSelect ? employeeSelect.value : (document.getElementById('name') ? document.getElementById('name').value : null);
-    if (!uid) {
-      setStatus('Please select an employee.', false);
-      return;
-    }
+    if (!auth.currentUser) { alert('Please sign in first'); return; }
+    const token = await auth.currentUser.getIdToken(true);
+    const payload = { id: uid, name, role: roleVal, department: deptVal, shift: shiftVal };
 
-    const user = usersMap.get(uid);
-
-    // ---------- Prevent creation if user already has a QR ----------
-    if (user && user.qrDataURI) {
-      setStatus('This user already has a QR. Generation blocked.', false);
-      return;
-    }
-
-    if (!user) {
-      setStatus('Selected user not found.', false);
-      return;
-    }
-
-    const name = user.username || user.displayName || '';
-    const roleVal = (roleField && roleField.value) ? roleField.value : (user.role || '');
-    const departmentVal = departmentSelect ? departmentSelect.value : (user.department || '');
-    const shiftVal = shiftSelect ? (shiftSelect.value || user.shift || '') : (user.shift || '');
-
-    // Persist changes (department / shift) to users/{uid} if they changed so payroll can read them later
+    // Preflight: check server health to provide clearer error when backend is down
     try {
-      const updates = {};
-      if (departmentVal && departmentVal !== user.department) updates.department = departmentVal;
-      if (shiftVal && shiftVal !== user.shift) updates.shift = shiftVal;
-      if (Object.keys(updates).length) {
-        await updateDoc(doc(db, 'users', uid), updates);
-        usersMap.set(uid, { ...user, ...updates });
-      }
-    } catch (err) {
-      console.warn('Could not save shift/department to user doc:', err);
-      // continue anyway — payload will include the shift so generator still works
+      const health = await fetch(`${API_BASE}/health`, { method: 'GET' });
+      if (!health.ok) throw new Error('Server health check failed');
+    } catch (netErr) {
+      console.error('API health check failed', netErr);
+      setStatus('Unable to reach backend at ' + API_BASE + '. Start the server (run `npm start` in the project folder).', false);
+      return;
     }
 
-    setStatus('Creating employee QR...');
-
+    let res, j;
     try {
-      const token = auth.currentUser ? await auth.currentUser.getIdToken(true).catch(e => { console.error('getIdToken failed', e); return null; }) : null;
-      if (!token) {
-        setStatus('Not signed in. Please sign in as admin to create employees.', false);
-        return;
-      }
-
-      const res = await fetch(`${API_BASE}/api/employee`, {
+      res = await fetch(`${API_BASE}/api/generateQR`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({ id: uid, name, role: roleVal, department: departmentVal })
+        body: JSON.stringify(payload)
       });
-
-      const text = await res.text();
-      let j;
+      j = await res.json();
+    } catch (fetchErr) {
+      console.error('generateQR fetch failed', fetchErr);
+      setStatus('Failed to contact QR generation server. See console.', false);
+      return;
+    }
+    if (res.ok && j.qrDataURI) {
+      qrPreview.innerHTML = `<img src="${j.qrDataURI}" alt="QR">`;
       try {
-        j = JSON.parse(text);
-      } catch (ex) {
-        console.error('Non-JSON response from /api/employee:', text);
-        setStatus('Server returned non-JSON response. See console.', false);
-        return;
-      }
-
-      if (j.error) {
-        setStatus('Server error: ' + j.error, false);
-        console.error('/api/employee returned error JSON:', j);
-        return;
-      }
-
-      if (resultArea) resultArea.style.display = 'block';
-      if (info) info.innerHTML = `<div><strong>${j.name}</strong> <span class="muted">${j.id}</span></div><div class="muted">Role: ${roleVal || '—'}</div>`;
-      if (qrPreview) qrPreview.innerHTML = `<img class="generator-qr-image" id="qrImg" src="${j.qrDataURI}" alt="QR for ${j.name}" />`;
-
-      if (j.existing) {
-        setStatus('User already has a QR — returned existing QR.');
-      } else {
-        setStatus('Employee created. Right-click QR to save, or use Download/Print.');
-      }
-
-      try {
-        await updateDoc(doc(db, 'users', uid), { qrDataURI: j.qrDataURI, department: departmentVal });
-      } catch (e) {
-        console.warn('Failed to update user doc with qrDataURI/department', e);
-      }
-
-      window.__lastQR = { id: j.id, name: j.name, dataURI: j.qrDataURI };
-
-    } catch (err) {
-      console.error('Error creating employee QR:', err);
-      setStatus('Network/server error: ' + (err.message || err), false);
+        if (j.id) await updateDoc(doc(db, 'users', j.id), { department: deptVal || null, shift: shiftVal || null });
+      } catch (err) { console.warn('local update doc failed', err); }
+      setStatus('QR created and assigned.');
+      await loadUsersDropdown();
+    } else {
+      console.error('generateQR failed', j);
+      setStatus('Failed to generate QR. See console.', false);
     }
   });
 }
@@ -261,4 +219,212 @@ export async function initializeGenerator() {
 }
 
 export function initializeScanner() {
+  // --- Scanner controls & logic (initialize event handlers) ---
+  let currentMode = 'in'; // 'in' or 'out'
+  let html5Qrcode = null;
+  let currentCameraId = null;
+
+  function setModeVisuals() {
+    const tin = document.getElementById('modeTimeIn');
+    const tout = document.getElementById('modeTimeOut');
+    if (tin) tin.classList.toggle('active', currentMode === 'in');
+    if (tout) tout.classList.toggle('active', currentMode === 'out');
+  }
+  document.getElementById('modeTimeIn')?.addEventListener('click', () => { currentMode = 'in'; setModeVisuals(); });
+  document.getElementById('modeTimeOut')?.addEventListener('click', () => { currentMode = 'out'; setModeVisuals(); });
+
+  async function listCamerasToSelect() {
+    try {
+      // Primary: try Html5Qrcode helper which may internally request camera access
+      let devices = [];
+      try {
+        devices = await Html5Qrcode.getCameras();
+      } catch (hErr) {
+        console.warn('Html5Qrcode.getCameras failed, will try navigator.mediaDevices fallback', hErr);
+        // Continue to fallback below
+      }
+
+      // Fallback: try to use navigator.mediaDevices.enumerateDevices.
+      if ((!devices || devices.length === 0) && navigator && navigator.mediaDevices && typeof navigator.mediaDevices.enumerateDevices === 'function') {
+        try {
+          // Trigger a permission prompt if we don't already have access by briefly requesting a stream.
+          if (navigator.mediaDevices.getUserMedia) {
+            try {
+              const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+              // Immediately stop tracks to release camera
+              stream.getTracks().forEach(t => t.stop());
+            } catch (permErr) {
+              // permission denied or not available — we'll still try enumerateDevices which may reveal labels only when granted
+              console.warn('getUserMedia prompt failed or denied', permErr);
+            }
+          }
+
+          const list = await navigator.mediaDevices.enumerateDevices();
+          devices = list.filter(d => d.kind === 'videoinput').map(d => ({ id: d.deviceId, label: d.label }));
+        } catch (enumErr) {
+          console.error('enumerateDevices fallback failed', enumErr);
+        }
+      }
+
+      const sel = document.getElementById('cameraSelect');
+      if (!sel) return;
+      sel.innerHTML = '';
+      if (!devices || devices.length === 0) {
+        sel.innerHTML = '<option>No cameras</option>';
+        addStatus('No cameras found. Ensure your browser allows camera access and no other app is using the camera.', false);
+        return;
+      }
+      devices.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = d.label || d.id || 'Camera';
+        sel.appendChild(opt);
+      });
+      currentCameraId = devices[0].id;
+      sel.value = currentCameraId;
+      addStatus(`${devices.length} camera(s) found`);
+    } catch (err) {
+      console.error('listCameras err', err);
+      // Provide a helpful message to the user explaining likely causes
+      const msg = (err && err.name === 'NotReadableError') ? 'Camera not readable — it may be in use by another application.' : 'Could not enumerate cameras. Check permissions and that no other app is using the camera.';
+      addStatus(msg, false);
+    }
+  }
+
+  document.getElementById('cameraSelect')?.addEventListener('change', (e) => currentCameraId = e.target.value);
+
+  async function startCameraPreview() {
+    if (!currentCameraId) { addStatus('Select camera first', false); return; }
+    if (html5Qrcode) return addStatus('Camera already started');
+    html5Qrcode = new Html5Qrcode('cameraPreview');
+    try {
+      await html5Qrcode.start(currentCameraId, { fps: 10, qrbox: 300 }, onScanSuccess, onScanFailure);
+      addStatus('Camera started');
+    } catch (err) {
+      console.error('start error', err);
+      addStatus('Camera start failed: ' + (err.message || err), false);
+    }
+  }
+  document.getElementById('startCamera')?.addEventListener('click', startCameraPreview);
+
+  async function stopCameraPreview() {
+    if (!html5Qrcode) return addStatus('Scanner not running', false);
+    try {
+      await html5Qrcode.stop();
+      html5Qrcode.clear();
+      html5Qrcode = null;
+      addStatus('Camera stopped');
+    } catch (err) {
+      console.error('stop error', err);
+      addStatus('Failed to stop camera', false);
+    }
+  }
+  document.getElementById('stopCamera')?.addEventListener('click', stopCameraPreview);
+
+  document.getElementById('retryCameras')?.addEventListener('click', async () => {
+    await listCamerasToSelect();
+    addStatus('Retried camera enumeration');
+  });
+
+  document.getElementById('uploadQrImage')?.addEventListener('change', async (ev) => {
+    const file = ev.target.files?.[0];
+    if (!file) return;
+    try {
+      // Support multiple html5-qrcode builds: prefer scanFileV2, fall back to scanFile.
+      let scanResult = null;
+      if (Html5Qrcode && typeof Html5Qrcode.scanFileV2 === 'function') {
+        scanResult = await Html5Qrcode.scanFileV2(file, {});
+      } else if (Html5Qrcode && typeof Html5Qrcode.scanFile === 'function') {
+        // older builds may expose scanFile which returns decoded text or an object
+        scanResult = await Html5Qrcode.scanFile(file, {});
+      } else {
+        throw new Error('Html5Qrcode scanFile API not available in this build');
+      }
+
+      // Normalize result to decodedText string (support different return shapes)
+      let decodedText = null;
+      if (!scanResult) decodedText = null;
+      else if (typeof scanResult === 'string') decodedText = scanResult;
+      else if (Array.isArray(scanResult) && scanResult.length > 0) {
+        // some versions return an array of results
+        decodedText = scanResult[0].decodedText || scanResult[0].text || null;
+      } else if (scanResult.decodedText) decodedText = scanResult.decodedText;
+      else if (scanResult.text) decodedText = scanResult.text;
+
+      if (!decodedText) return addStatus('No QR found in image', false);
+      await processDecodedText(decodedText);
+    } catch (err) {
+      console.error('scanFile err', err);
+      addStatus('Failed to scan image', false);
+    }
+  });
+
+  function onScanFailure(error) {
+    // optional per-frame failure logs (do not spam)
+  }
+  async function onScanSuccess(decodedText, decodedResult) {
+    try {
+      let payload;
+      try { payload = JSON.parse(decodedText); } catch(e) { payload = { id: decodedText }; }
+      await processDecodedText(payload);
+    } catch (err) {
+      console.error('onScanSuccess err', err);
+      addStatus('Error processing QR', false);
+    }
+  }
+
+  async function processDecodedText(payload) {
+    const id = payload.id || payload.qrValue || payload.value || null;
+    let userDoc = null;
+    if (id) {
+      const uref = doc(db, 'users', id);
+      const usnap = await getDoc(uref);
+      if (usnap.exists()) userDoc = { id: usnap.id, ...(usnap.data()||{}) };
+    }
+    if (!userDoc && payload.qrValue) {
+      const q = query(collection(db, 'users'), where('qrValue','==', payload.qrValue));
+      const snaps = await getDocs(q);
+      if (!snaps.empty) { const d = snaps.docs[0]; userDoc = { id: d.id, ...(d.data()||{}) }; }
+    }
+    if (!userDoc) { addStatus('QR not linked to user', false); return; }
+
+    const now = new Date();
+    const evalRes = evaluateForUser({ shift: userDoc.shift || 'morning' }, now);
+
+    const record = {
+      userId: userDoc.id,
+      username: userDoc.username || userDoc.email || null,
+      mode: currentMode === 'in' ? 'time-in' : 'time-out',
+      recordedTime: evalRes.recordedTime.toISOString(),
+      rawTime: now.toISOString(),
+      status: evalRes.status,
+      minutesLate: evalRes.minutesLate,
+      shift: userDoc.shift || null,
+      createdAt: serverTimestamp()
+    };
+    await addDoc(collection(db, 'attendance'), record);
+
+    addStatus(`Recorded ${record.mode} for ${record.username || record.userId} — ${record.status}`);
+    addDebug('Saved attendance: ' + JSON.stringify(record));
+  }
+
+  // initial camera enumeration
+  listCamerasToSelect().catch(e => console.warn('camera list init failed', e));
+}
+
+// Helper small UI functions (used by scanner)
+function addStatus(txt, ok = true) {
+  const el = document.getElementById('scannerStatusLog');
+  if (!el) return;
+  const d = document.createElement('div');
+  d.textContent = `${new Date().toLocaleTimeString()} — ${txt}`;
+  d.style.color = ok ? '#0a0' : '#a00';
+  el.prepend(d);
+}
+function addDebug(txt) {
+  const el = document.getElementById('scannerDebugLog');
+  if (!el) return;
+  const d = document.createElement('div');
+  d.textContent = `${new Date().toISOString()} ${txt}`;
+  el.prepend(d);
 }

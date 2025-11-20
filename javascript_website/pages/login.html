@@ -5,9 +5,6 @@
   <title>HotelLink - Login</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../css/styles.css">
-  <style>
-    nav { display: flex; align-items: center; gap: 1.5rem; }
-  </style>
 </head>
 <body>
   <header>
@@ -21,7 +18,7 @@
   </header>
 
   <main>
-    <section class="page">
+    <section class="auth-page login-page">
       <div class="form-container">
         <h2>Login</h2>
         <label for="login-email">Email</label>
@@ -54,10 +51,10 @@
     import { updateNavVisibility } from '../js/nav-control.js';
     import { initShowPassword } from '../js/show-password.js';
 
-    // Initialize show password toggle
+
     initShowPassword();
 
-    // Handle login button click
+
     document.getElementById('login-btn').addEventListener('click', async () => {
       const email = document.getElementById('login-email').value;
       const password = document.getElementById('login-password').value;
@@ -69,7 +66,7 @@
       }
     });
 
-    // Redirect if already logged in
+
     auth.onAuthStateChanged(user => {
       if (user) {
         window.location.href = '../index.html';

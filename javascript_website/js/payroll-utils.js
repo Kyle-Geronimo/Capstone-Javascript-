@@ -18,6 +18,82 @@ export const PAYROLL_CONFIG = {
   pagibigPercent: 0.02
 };
 
+// -------------------------- attendance / scanner helpers --------------------------
+/** buildShiftDate(shiftHHMM, referenceDate)
+ *  Convert an HH:mm string into a Date on the same day as the provided referenceDate.
+ *  @param {string} shiftHHMM - e.g. "06:00"
+ *  @param {Date|string|number} referenceDate - date (or parsable) to copy the day from
+ *  @returns {Date}
+ */
+export function buildShiftDate(shiftHHMM, referenceDate) {
+  const [hh, mm] = String(shiftHHMM).split(':').map(Number);
+  const d = new Date(referenceDate);
+  d.setHours(Number.isFinite(hh) ? hh : 0, Number.isFinite(mm) ? mm : 0, 0, 0);
+  return d;
+}
+
+/** normalizeTimeIn(rawTime, shiftStartHHMM, windowMin = 10)
+ *  If the raw scan time is within ±windowMin minutes of the shift start,
+ *  round it to the exact shift start. Otherwise return the original time.
+ */
+export function normalizeTimeIn(rawTime, shiftStartHHMM, windowMin = 10) {
+  const time = new Date(rawTime);
+  const shiftStart = buildShiftDate(shiftStartHHMM, time);
+
+  const earlyWindow = new Date(shiftStart.getTime() - windowMin * 60 * 1000);
+  const lateWindow  = new Date(shiftStart.getTime() + windowMin * 60 * 1000);
+
+  if (time >= earlyWindow && time <= lateWindow) {
+    return new Date(shiftStart); // rounded
+  }
+  return time;
+}
+
+/** evaluateAttendance(rawTime, shiftStartHHMM, config)
+ *  Determine status: on-time / late / absent according to thresholds.
+ *  - late if minutes after shift start >= lateThresholdMin
+ *  - absent if minutes after shift start >= absentThresholdMin
+ *  Returns object: { status, minutesLate, recordedTime, shiftStart }
+ */
+export function evaluateAttendance(rawTime, shiftStartHHMM, config = {}) {
+  const lateMin   = config.lateThresholdMin   ?? 30;
+  const absentMin = config.absentThresholdMin ?? 60;
+  const roundMin  = config.roundWindowMin     ?? 10;
+
+  const normalized = normalizeTimeIn(rawTime, shiftStartHHMM, roundMin);
+  const shiftStart = buildShiftDate(shiftStartHHMM, normalized);
+
+  const diffMs  = normalized - shiftStart;
+  const diffMin = diffMs > 0 ? Math.floor(diffMs / 60000) : 0;
+
+  let status = "on-time";
+  if (diffMin >= absentMin) status = "absent";
+  else if (diffMin >= lateMin) status = "late";
+
+  return {
+    status,          // "on-time", "late", "absent"
+    minutesLate: diffMin,
+    recordedTime: normalized,
+    shiftStart
+  };
+}
+
+// Simple mapping for assigned shift names to HH:mm start times
+export const SHIFT_STARTS = {
+  morning: '06:00',
+  mid:     '14:00',
+  night:   '22:00'
+};
+
+/** evaluateForUser(user, rawTime)
+ *  Convenience wrapper that looks up the user's assigned shift and evaluates attendance.
+ *  Expects `user.shift` to be one of the keys in SHIFT_STARTS.
+ */
+export function evaluateForUser(user, rawTime) {
+  const shiftHHMM = SHIFT_STARTS[user.shift] || SHIFT_STARTS.morning;
+  return evaluateAttendance(rawTime, shiftHHMM);
+}
+
 export function toCents(amount) {
   // accept number or numeric string
   const n = Number(amount || 0);
@@ -158,7 +234,8 @@ export function computePayrollLine({
   }
 
   // manual adjustments (already in cents)
-  grossCents += Number(adjustmentsCents || 0);
+  // NOTE: adjustmentsCents represents deduction-type adjustments (loans, cash advances, UT/late amounts)
+  // These should not be added to gross; they are included in the deductions.total instead.
 
   // ------------------ deductions ------------------
   // If a monthlySalary is provided, compute statutory contributions from it
@@ -229,8 +306,11 @@ export function computePayrollLine({
     philhealth: { employee: philEmployee, employer: philEmployer, total: philTotal },
     pagibig: { employee: pagibigEmployee, employer: pagibigEmployer, total: pagibigTotal },
     stPeter: { employee: stPeter },
-    // also expose a simple sum of employee-side deductions (what's withheld)
-    total: sssEmployee + philEmployee + pagibigEmployee + stPeter
+    // include adjustmentsCents (loans, cash advance, UT amount etc.)
+    // NOTE: computePayrollLine receives 'adjustmentsCents' as a parameter (default 0)
+    adjustments_total: typeof adjustmentsCents === 'number' ? adjustmentsCents : 0,
+    // simple sum of employee-side deductions (what's withheld) — include adjustments here
+    total: sssEmployee + philEmployee + pagibigEmployee + stPeter + (typeof adjustmentsCents === 'number' ? adjustmentsCents : 0)
   };
 
   const netCents = grossCents - deductions.total;
@@ -249,7 +329,8 @@ export function computePayrollLine({
         phil_employer: fromCents(deductions.philhealth.employer),
         pagibig_employee: fromCents(deductions.pagibig.employee),
         pagibig_employer: fromCents(deductions.pagibig.employer),
-        stPeter_employee: fromCents(deductions.stPeter.employee)
+        stPeter_employee: fromCents(deductions.stPeter.employee),
+        adjustments_total: fromCents(deductions.adjustments_total) // expose adjustments in breakdown
       }
     },
     net: fromCents(netCents),

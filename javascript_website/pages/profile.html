@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="../css/styles.css">
   <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
   <script type="module" src="../js/auth.js"></script>
+  <script type="module" src="../js/payroll.js"></script>
 </head>
 <body>
   <header>
@@ -25,6 +26,7 @@
   <main>
     <section class="page">
       <div class="content-container profile-layout">
+        <!-- Profile Section -->
         <div class="profile-section">
           <div id="profile-info"></div>
         </div>
@@ -42,104 +44,82 @@
             </div>
           </div>
         </div>
-        
-        <div class="payroll-section">
-          <div id="payroll-info">
-          <div class="profile-card">
-            <h2>My Payroll Information</h2>
-            <div class="payroll-filters">
-              <div class="form-group">
-                <label for="payrollMonth">Month</label>
-                <select id="payrollMonth" class="form-control"></select>
-              </div>
-              <div class="form-group">
-                <label for="payrollPeriod">Period</label>
-                <select id="payrollPeriod" class="form-control">
-                  <option value="1-15">1 - 15</option>
-                  <option value="16-end">16 - end</option>
-                </select>
-              </div>
-              <button id="loadPayroll" class="action-btn primary">View Payroll</button>
+        <!-- Payroll Section -->
+        <!-- ===== REPLACE existing payroll area with this payroll display (profile.html) ===== -->
+        <section id="payroll-info" class="profile-section">
+          <h2>Payroll</h2>
+
+          <!-- Banner for the shown payroll run (created by JS when approved) -->
+
+          <!-- Visible payroll card -->
+          <div id="payrollDetails" class="payroll-card">
+            <div class="payroll-row">
+              <div class="label">Basic Pay</div>
+              <div id="basicPay" class="value">-</div>
             </div>
-            <div id="payrollDetails">
-              <div class="payroll-summary">
-                <h3>Payroll Summary</h3>
-                <table class="data-table">
-                  <tbody>
-                    <tr>
-                      <td>Basic Pay:</td>
-                      <td id="basicPay">-</td>
-                    </tr>
-                    <tr>
-                      <td>Morning Shift Days:</td>
-                      <td id="morningDays">-</td>
-                    </tr>
-                    <tr>
-                      <td>Mid Shift Days:</td>
-                      <td id="midDays">-</td>
-                    </tr>
-                    <tr>
-                      <td>Night Shift Days:</td>
-                      <td id="nightDays">-</td>
-                    </tr>
-                    <tr>
-                      <td>Overtime Hours:</td>
-                      <td id="otHours">-</td>
-                    </tr>
-                    <tr>
-                      <td>Overtime Amount:</td>
-                      <td id="otAmount">-</td>
-                    </tr>
-                    <tr>
-                      <td>Regular Holiday Hours:</td>
-                      <td id="regHolHours">-</td>
-                    </tr>
-                    <tr>
-                      <td>Regular Holiday Amount:</td>
-                      <td id="regHolAmount">-</td>
-                    </tr>
-                  </tbody>
-                </table>
 
-                <h3>Deductions</h3>
-                <table class="data-table">
-                  <tbody>
-                    <tr>
-                      <td>SSS Contribution:</td>
-                      <td id="sssEmployee">-</td>
-                    </tr>
-                    <tr>
-                      <td>PhilHealth Contribution:</td>
-                      <td id="philhealthEmployee">-</td>
-                    </tr>
-                    <tr>
-                      <td>Pagibig Contribution:</td>
-                      <td id="pagibigEmployee">-</td>
-                    </tr>
-                    <tr>
-                      <td>Total Deductions:</td>
-                      <td id="totalDeductions">-</td>
-                    </tr>
-                  </tbody>
-                </table>
+            <div class="payroll-row">
+              <div class="label">Overtime Amount</div>
+              <div id="otAmount" class="value">-</div>
+            </div>
 
-                <h3>Net Pay</h3>
-                <table class="data-table">
-                  <tbody>
-                    <tr>
-                      <td>Gross Pay:</td>
-                      <td id="grossPay">-</td>
-                    </tr>
-                    <tr>
-                      <td>Net Pay:</td>
-                      <td id="netPay">-</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+            <div class="payroll-row">
+              <div class="label">Gross Pay</div>
+              <div id="grossPay" class="value">-</div>
+            </div>
+
+            <div class="payroll-row">
+              <div class="label">Net Pay</div>
+              <div id="netPay" class="value">-</div>
+            </div>
+
+            <hr/>
+
+            <div class="payroll-row">
+              <div class="label">SSS (Employee)</div>
+              <div id="sssEmployee" class="value">-</div>
+            </div>
+
+            <div class="payroll-row">
+              <div class="label">PhilHealth (Employee)</div>
+              <div id="philhealthEmployee" class="value">-</div>
+            </div>
+
+            <div class="payroll-row">
+              <div class="label">Pag-IBIG (Employee)</div>
+              <div id="pagibigEmployee" class="value">-</div>
+            </div>
+
+            <hr/>
+
+            <div class="payroll-row">
+              <div class="label">Morning Shift Days</div>
+              <div id="morningDays" class="value">-</div>
+            </div>
+
+            <div class="payroll-row">
+              <div class="label">Mid Shift Days</div>
+              <div id="midDays" class="value">-</div>
+            </div>
+
+            <div class="payroll-row">
+              <div class="label">Night Shift Days</div>
+              <div id="nightDays" class="value">-</div>
+            </div>
+
+            <div class="payroll-row">
+              <div class="label">OT Hours</div>
+              <div id="otHours" class="value">-</div>
+            </div>
+
+            <div class="payroll-actions">
+              <!-- This button triggers the request flow in the JS -->
+              <button id="loadPayroll" class="btn primary">Request Payroll View</button>
+              <small class="hint">Request a view of your most recent saved payroll run. An admin will approve or deny your request.</small>
             </div>
           </div>
-        </div>
+        </section>
+        <!-- ===== end payroll area ===== -->
       </div>
     </section>
   </main>
@@ -164,25 +144,25 @@
         return;
       }
 
-      // Get the profile ID from URL if any
+
       const urlParams = new URLSearchParams(window.location.search);
       const profileId = urlParams.get('uid');
 
-      // Only allow viewing own profile unless admin
+
       const role = await getUserRole(user.uid);
       if (profileId && profileId !== user.uid && role !== 'admin') {
         window.location.href = '../index.html';
         return;
       }
 
-      // Load the appropriate profile
+
       try {
         await loadProfile(profileId || user.uid);
         
-        // Load user's QR code
+
         await loadUserQR(user.uid);
         
-        // Setup QR download/print buttons
+
         document.getElementById('downloadUserQr').addEventListener('click', downloadUserQR);
         document.getElementById('printUserQr').addEventListener('click', printUserQR);
         await updateNavVisibility();
@@ -193,7 +173,7 @@
       }
     });
 
-    // Update nav immediately and on auth state changes
+
     updateNavVisibility();
     highlightActiveNavBtn();
     auth.onAuthStateChanged(() => {
@@ -233,90 +213,164 @@
   </div>
 
   <script type="module">
-    import { initializePayrollSystem, computeForPeriod } from '../js/payroll.js';
-    import { firebaseConfig } from '../js/firebase-config.js';
-    import { getFirestore, collection, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js';
-
-    // Initialize payroll system
-    await initializePayrollSystem(firebaseConfig);
-    const db = getFirestore();
-
-    // Populate month select
-    const monthSelect = document.getElementById('payrollMonth');
-    const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                   'July', 'August', 'September', 'October', 'November', 'December'];
-    months.forEach((month, index) => {
-      const option = document.createElement('option');
-      option.value = index + 1;
-      option.textContent = month;
-      monthSelect.appendChild(option);
-    });
-    monthSelect.value = new Date().getMonth() + 1;
-
-    // Handle payroll view button
-    document.getElementById('loadPayroll').addEventListener('click', async () => {
-      const month = document.getElementById('payrollMonth').value;
-      const period = document.getElementById('payrollPeriod').value;
-      
-      try {
-        // Get current user's data only
-        const user = auth.currentUser;
-        if (!user) return;
-
-        // Get user's employment details
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (!userDoc.exists()) return;
-        const userData = userDoc.data();
-
-        // Get attendance records for the user
-        const attendanceRef = collection(db, 'attendance');
-        const attendanceQuery = query(attendanceRef, where('userId', '==', user.uid));
-        const attendanceSnapshot = await getDocs(attendanceQuery);
-        const dtrRows = attendanceSnapshot.docs.map(doc => doc.data());
-
-        // Compute payroll for just this user
-        const payrollRows = computeForPeriod([userData], dtrRows, month, period);
-        
-        if (payrollRows && payrollRows.length > 0) {
-          const payroll = payrollRows[0];
-          
-          // Update UI with payroll details
-          document.getElementById('basicPay').textContent = formatCurrency(payroll.basic);
-          document.getElementById('morningDays').textContent = payroll.morningShiftDays;
-          document.getElementById('midDays').textContent = payroll.midShiftDays;
-          document.getElementById('nightDays').textContent = payroll.nightShiftDays;
-          document.getElementById('otHours').textContent = payroll.otHours;
-          document.getElementById('otAmount').textContent = formatCurrency(payroll.otAmount);
-          document.getElementById('regHolHours').textContent = payroll.regHolHours;
-          document.getElementById('regHolAmount').textContent = formatCurrency(payroll.regHolAmount);
-          document.getElementById('sssEmployee').textContent = formatCurrency(payroll.sssEmployee);
-          document.getElementById('philhealthEmployee').textContent = formatCurrency(payroll.philhealthEmployee);
-          document.getElementById('pagibigEmployee').textContent = formatCurrency(payroll.pagibigEmployee);
-          document.getElementById('totalDeductions').textContent = formatCurrency(payroll.totalDeductions);
-          document.getElementById('grossPay').textContent = formatCurrency(payroll.gross);
-          document.getElementById('netPay').textContent = formatCurrency(payroll.net);
-        } else {
-          // No payroll data found
-          const fields = ['basicPay', 'morningDays', 'midDays', 'nightDays', 'otHours', 
-                         'otAmount', 'regHolHours', 'regHolAmount', 'sssEmployee', 
-                         'philhealthEmployee', 'pagibigEmployee', 'totalDeductions', 
-                         'grossPay', 'netPay'];
-          fields.forEach(field => {
-            document.getElementById(field).textContent = '-';
-          });
-        }
-      } catch (error) {
-        console.error('Error loading payroll:', error);
-        alert('Error loading payroll information. Please try again.');
-      }
-    });
-
-    function formatCurrency(amount) {
-      return new Intl.NumberFormat('en-PH', {
-        style: 'currency',
-        currency: 'PHP'
-      }).format(amount);
+    // Wait-for-global helper (polls for a global variable to exist)
+    function waitForGlobal(name, timeout = 5000, interval = 100) {
+      return new Promise((resolve, reject) => {
+        const start = Date.now();
+        (function poll() {
+          if (window[name]) return resolve(window[name]);
+          if (Date.now() - start >= timeout) return reject(new Error(`${name} not available after ${timeout}ms`));
+          setTimeout(poll, interval);
+        })();
+      });
     }
+
+    (async () => {
+      try {
+        // Wait for firebase globals and payroll helper to be registered by your other scripts
+        const auth = await waitForGlobal('auth', 10000).catch(() => null);
+        const db = await waitForGlobal('db', 10000).catch(() => null);
+        // fetchMostRecentPayrollRun should be globally available from payroll.js (profile page loads it)
+        const fetchMostRecentPayrollRun = await waitForGlobal('fetchMostRecentPayrollRun', 10000).catch(() => null);
+
+        if (!auth || !db) {
+          console.error('Firebase auth/db globals not ready on profile page. Payroll features disabled.');
+          return;
+        }
+        if (!fetchMostRecentPayrollRun) {
+          console.warn('fetchMostRecentPayrollRun not found. Payroll view will still request approval but cannot auto-load runs.');
+        }
+
+        // Import Firestore helpers (we still import getDocs because profile uses it)
+        const { addDoc, collection, query, where, onSnapshot, serverTimestamp, doc, getDoc, getDocs } =
+          await import('https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js');
+
+        // Elements
+        const requestBtn = document.getElementById('loadPayroll');
+        if (!requestBtn) {
+          console.warn('Payroll request button #loadPayroll not found');
+          return;
+        }
+        requestBtn.textContent = 'Request Payroll View';
+
+        // Click handler: create request doc
+        requestBtn.addEventListener('click', async () => {
+          try {
+            const user = auth.currentUser;
+            if (!user) { alert('Please sign in to request payroll view.'); return; }
+
+            const uDocRef = doc(db, 'users', user.uid);
+            const uSnap = await getDoc(uDocRef);
+            const u = uSnap.exists() ? uSnap.data() : {};
+
+            // avoid duplicate pending
+            const q = query(collection(db, 'payrollViewRequests'), where('userId', '==', user.uid), where('status', '==', 'pending'));
+            const snap = await getDocs(q);
+            if (!snap.empty) {
+              alert('You already have a pending payroll view request. An admin will review it shortly.');
+              return;
+            }
+
+            const payload = {
+              userId: user.uid,
+              username: u.username || u.email || '',
+              department: u.department || '',
+              status: 'pending',
+              createdAt: serverTimestamp()
+            };
+
+            await addDoc(collection(db, 'payrollViewRequests'), payload);
+            alert('Payroll view request submitted. An admin will review it.');
+          } catch (err) {
+            console.error('Failed to submit payroll request', err);
+            alert('Failed to submit payroll request: ' + (err.message || err));
+          }
+        });
+
+        // Listen for this user's payroll request changes and show payroll when approved.
+        (function listenForMyPayrollRequestChanges() {
+          auth.onAuthStateChanged(user => {
+            if (!user) return;
+            const reqQ = query(collection(db, 'payrollViewRequests'), where('userId', '==', user.uid));
+            const unsub = onSnapshot(reqQ, async snap => {
+              if (snap.empty) return;
+              const docs = snap.docs.sort((a,b)=>{
+                const A = a.data().createdAt ? a.data().createdAt.toMillis() : 0;
+                const B = b.data().createdAt ? b.data().createdAt.toMillis() : 0;
+                return B - A;
+              });
+              const req = docs[0].data();
+              if (req.status === 'approved') {
+                try {
+                  if (!fetchMostRecentPayrollRun) {
+                    alert('Request approved but payroll loader is not available on this page.');
+                    return;
+                  }
+                  const { ratesMap, runMeta, linesMap } = await fetchMostRecentPayrollRun();
+                  // Support both Map and plain object for linesMap
+                  const hasLine = linesMap && (typeof linesMap.has === 'function' ? linesMap.has(user.uid) : (linesMap[user.uid] !== undefined));
+                  const line = hasLine ? (typeof linesMap.get === 'function' ? linesMap.get(user.uid) : linesMap[user.uid]) : null;
+
+                  if (line) {
+                    // fill UI fields (guarded)
+                    if (line.basic !== undefined) document.getElementById('basicPay').textContent = formatCurrency(line.basic);
+                    if (line.otAmount !== undefined) document.getElementById('otAmount').textContent = formatCurrency(line.otAmount);
+                    if (line.gross !== undefined) document.getElementById('grossPay').textContent = formatCurrency(line.gross);
+                    if (line.net !== undefined) document.getElementById('netPay').textContent = formatCurrency(line.net);
+                    if (line.sssEmployee !== undefined) document.getElementById('sssEmployee').textContent = formatCurrency(line.sssEmployee);
+                    if (line.philhealthEmployee !== undefined) document.getElementById('philhealthEmployee').textContent = formatCurrency(line.philhealthEmployee);
+                    if (line.pagibigEmployee !== undefined) document.getElementById('pagibigEmployee').textContent = formatCurrency(line.pagibigEmployee);
+                    if (line.morningShiftDays !== undefined) document.getElementById('morningDays').textContent = line.morningShiftDays;
+                    if (line.midShiftDays !== undefined) document.getElementById('midDays').textContent = line.midShiftDays;
+                    if (line.nightShiftDays !== undefined) document.getElementById('nightDays').textContent = line.nightShiftDays;
+                    if (line.otHours !== undefined) document.getElementById('otHours').textContent = line.otHours;
+
+                    // show run meta banner (create or update)
+                    const metaElId = 'payrollRunMetaBanner';
+                    let metaEl = document.getElementById(metaElId);
+                    const payrollInfo = document.getElementById('payroll-info');
+                    if (!metaEl) {
+                      metaEl = document.createElement('div');
+                      metaEl.id = metaElId;
+                      metaEl.className = 'payroll-meta';
+                      if (payrollInfo) payrollInfo.insertBefore(metaEl, document.getElementById('payrollDetails'));
+                    }
+                    const periodText = runMeta && runMeta.periodStart ? `${escapeHtml(runMeta.periodStart)} → ${escapeHtml(runMeta.periodEnd)}` : 'Most recent saved run';
+                    metaEl.innerHTML = `<strong>Payroll run shown:</strong> ${periodText} ${runMeta && runMeta.note ? `<div class="meta-note">${escapeHtml(runMeta.note)}</div>` : ''}`;
+                  } else {
+                    alert('Your payroll view request was approved but there is no saved payroll line for you in the most recent run.');
+                  }
+                } catch (e) {
+                  console.error('Error loading saved payroll run after approval', e);
+                  alert('Failed to load saved payroll run.');
+                }
+              } else if (req.status === 'denied') {
+                alert('Your payroll view request was denied by an administrator.');
+              } else {
+                // pending - no UI change
+              }
+            }, err => {
+              console.error('payrollViewRequests listener failed', err);
+            });
+
+            window.addEventListener('beforeunload', () => { if (typeof unsub === 'function') unsub(); });
+          });
+        })();
+
+        // Helpers
+        function formatCurrency(v) {
+          if (v === null || v === undefined || isNaN(Number(v))) return '-';
+          return Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        function escapeHtml(s) {
+          if (!s && s !== 0) return '';
+          return String(s).replace(/[&<>\"]+/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[m]));
+        }
+
+      } catch (err) {
+        console.error('Profile payroll init error', err);
+      }
+    })();
   </script>
 </body>
 </html>

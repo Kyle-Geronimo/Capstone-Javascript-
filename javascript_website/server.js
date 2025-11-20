@@ -7,14 +7,35 @@ import fs from 'fs';
 import QRCode from 'qrcode';
 import { nanoid } from 'nanoid';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-// Initialize Admin SDK with your service account
-admin.initializeApp({
-  credential: admin.credential.cert(join(__dirname, 'mariners-hotellink-firebase-adminsdk-fbsvc-65bfc6c5b7.json'))
-});
+// --- FIREBASE ADMIN INIT (replace existing block) ---
+const saPath = join(__dirname, 'mariners-hotellink-firebase-adminsdk-fbsvc-65bfc6c5b7.json');
+if (!fs.existsSync(saPath)) {
+  console.error('Service account JSON not found at', saPath);
+  process.exit(1);
+}
+let serviceAccount;
+try {
+  serviceAccount = JSON.parse(fs.readFileSync(saPath, 'utf8'));
+} catch (err) {
+  console.error('Failed to parse service account JSON:', err);
+  process.exit(1);
+}
+
+try {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+  console.log('Firebase Admin initialized. project_id=' + (serviceAccount.project_id || '<none>'));
+} catch (err) {
+  console.error('admin.initializeApp failed:', err);
+  process.exit(1);
+}
 
 const db = admin.firestore();
+// --- end admin init ---
 const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
@@ -117,6 +138,40 @@ app.post('/api/employee', verifyToken, async (req, res) => {
   } catch (err) {
     console.error('POST /api/employee error:', err);
     return res.status(500).json({ error: 'Server error creating employee', details: String(err) });
+  }
+});
+
+// POST /api/generateQR — generate a data-URI QR and attach to users doc (protected)
+app.post('/api/generateQR', verifyToken, async (req, res) => {
+  try {
+    const { id, name, role, department, shift } = req.body || {};
+    if (!name && !id) return res.status(400).json({ error: 'Missing id or name' });
+
+    const targetId = id && String(id).trim() ? String(id).trim() : nanoid(8);
+    const uRef = db.collection('users').doc(targetId);
+    const uSnap = await uRef.get();
+
+    if (uSnap.exists && uSnap.data() && uSnap.data().qrDataURI) {
+      return res.json({ id: targetId, qrDataURI: uSnap.data().qrDataURI, existing: true });
+    }
+
+    const payload = { id: targetId, name: name || (uSnap.exists ? uSnap.data().username : null) };
+    const qrDataURI = await QRCode.toDataURL(JSON.stringify(payload), { errorCorrectionLevel: 'M', margin: 2, width: 400 });
+
+    await uRef.set({
+      username: name || (uSnap.exists ? uSnap.data().username : null),
+      role: role || (uSnap.exists ? uSnap.data().role : 'employee'),
+      department: department || (uSnap.exists ? uSnap.data().department : null),
+      shift: shift || (uSnap.exists ? uSnap.data().shift : null),
+      qrValue: targetId,
+      qrDataURI,
+      qrAssignedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    return res.json({ id: targetId, qrDataURI, existing: false });
+  } catch (err) {
+    console.error('/api/generateQR error:', err);
+    return res.status(500).json({ error: 'Server error generating QR', details: String(err) });
   }
 });
 

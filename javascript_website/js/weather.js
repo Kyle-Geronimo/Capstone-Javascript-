@@ -82,6 +82,9 @@ export async function initializeWeatherCards() {
     const weatherContainer = document.getElementById('weather-container');
     if (!weatherContainer) return;
 
+    // clear any existing cards before rendering
+    weatherContainer.innerHTML = '';
+
     for (const hotel of hotelWeatherData) {
         try {
             const weatherData = await fetchWeatherData(hotel.latitude, hotel.longitude);
@@ -91,7 +94,17 @@ export async function initializeWeatherCards() {
             const card = document.createElement('div');
             card.className = 'weather-card';
             card.setAttribute('data-hotel', hotel.name);
+
+            // determine logo path (strip apostrophes for D'Mariners filename)
+            function logoPathFor(name) {
+                const filename = name.replace(/'/g, '').trim();
+                return `image/logo/${filename}.jpg`;
+            }
+
+            const logoSrc = logoPathFor(hotel.name);
+
             card.innerHTML = `
+                <div class="card-logo"><img src="${logoSrc}" alt="${hotel.name} logo"></div>
                 <h3>${hotel.name}</h3>
                 <div class="weather-icon">${weatherIcon}</div>
                 <div class="weather-details">

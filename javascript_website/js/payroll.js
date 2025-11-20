@@ -3,7 +3,8 @@ import { computePayrollLine, toCents } from './payroll-utils.js';
 import { auth, db } from './firebase-config.js';
 import { getSssTable, lookupSssContribution } from './sss-table.js';
 import {
-  collection, getDocs, getDoc, query, where, orderBy, addDoc, doc, setDoc, serverTimestamp, Timestamp, onSnapshot, limit, documentId
+  collection, getDocs, getDoc, query, where, orderBy, addDoc, doc, setDoc, serverTimestamp, Timestamp, onSnapshot, limit, documentId,
+  updateDoc, arrayUnion, arrayRemove
 } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
 
 // UI elements
@@ -46,6 +47,11 @@ function findSssFromPayload(monthlySalary) {
 // --- Specific XLSX parser for 2025 Tabulation format ---
 // Usage: pass a SheetJS `workbook` object; returns an array of table rows
 function parseTabulation2025(workbook) {
+  // Defensive: ensure SheetJS is loaded
+  if (typeof XLSX === 'undefined') {
+    throw new Error('SheetJS (XLSX) not loaded. Add <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script> or include ../vendor/xlsx.full.min.js before payroll.js');
+  }
+
   const sheet = workbook.Sheets["Tabulation"];
   if (!sheet) throw new Error("Sheet 'Tabulation' not found in Excel file.");
 
@@ -110,9 +116,313 @@ function parseTabulation2025(workbook) {
   return table;
 }
 
+// Robust tabulation parser + preview renderer (drop-in replacement)
+async function parseTabulationWorkbook(fileOrWorkbook) {
+  // load workbook if a File object is passed
+  let workbook;
+  if (fileOrWorkbook && fileOrWorkbook.SheetNames) workbook = fileOrWorkbook;
+  else if (fileOrWorkbook && typeof File !== 'undefined' && fileOrWorkbook instanceof File) {
+    const ab = await fileOrWorkbook.arrayBuffer();
+    workbook = XLSX.read(ab, { type: 'array', cellDates: true, defval: '' });
+  } else throw new Error('parseTabulationWorkbook expects a File or workbook');
+
+  const sheetName = workbook.SheetNames.find(n => /tabulation|sss|contribution/i.test(n)) || workbook.SheetNames[0];
+  const ws = workbook.Sheets[sheetName];
+  const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+  // --- detect header block (first 20 rows)
+  const first20 = rawRows.slice(0, 20);
+  let headerStart = first20.findIndex(row => (row || []).join(' ').toUpperCase().match(/RANGE|MONTHLY|SALARY|EMPLOYER|EMPLOYEE|COMPENSATION/));
+  if (headerStart === -1) headerStart = first20.findIndex(r => r && r.some(c => String(c).trim() !== ''));
+  if (headerStart === -1) headerStart = 0;
+
+  // allow up to 4 header rows (concat)
+  const headerRows = [];
+  for (let i = headerStart; i < Math.min(headerStart + 4, rawRows.length); i++) headerRows.push(rawRows[i] || []);
+
+  const maxCols = Math.max(...headerRows.map(r => r.length));
+  const columns = Array.from({length: maxCols}, (_,ci) => {
+    const parts = [];
+    for (let r=0;r<headerRows.length;r++){
+      const t = (headerRows[r][ci]||'').toString().trim();
+      if (t) parts.push(t);
+    }
+    return parts.join(' ').replace(/\s+/g,' ').trim().toUpperCase();
+  });
+
+  // DEBUG: show the columns the parser sees
+  console.debug('Tabulation parser: detected headerStart=', headerStart, 'headerRows=', headerRows.length);
+  console.debug('Detected columns:', columns.map((c,i)=>`${i}:${c}`));
+
+  // helpers to find columns more flexibly
+  const findFirst = (...keys) => {
+    const K = keys.map(k=>k.toUpperCase());
+    for (let i=0;i<columns.length;i++){
+      const col = columns[i]||'';
+      if (K.every(k => k && col.includes(k))) return i;
+    }
+    for (let i=0;i<columns.length;i++){
+      const col = columns[i]||'';
+      for (const k of K) if (k && col.includes(k)) return i;
+    }
+    return -1;
+  };
+
+  // find obvious column indices
+  let idxRange = findFirst('RANGE','COMPENSATION');
+  const idxFrom = findFirst('FROM') >=0 ? findFirst('FROM') : -1;
+  const idxTo = findFirst('TO') >=0 ? findFirst('TO') : -1;
+  let idxMSC = findFirst('MONTHLY','SALARY','CREDIT');
+  let idxEmployeesComp = findFirst('EMPLOYEES','COMPENSATION');
+  // find MPF columns (may appear twice: employer and employee)
+  const mpfCols = [];
+  columns.forEach((c,i)=>{ if (/\bMPF\b/.test(c) || c.includes('MANDATORY PROVIDENT') ) mpfCols.push(i); });
+  // find EC columns
+  const ecCols = [];
+  columns.forEach((c,i)=>{ if (/\bEC\b/.test(c) || c.includes('EMPLOYER CONTRIBUTION') ) ecCols.push(i); });
+  // find REGULAR SS & TOTAL columns (there may be multiple 'TOTAL' labels)
+  const totalCols = columns.map((c,i)=> c.includes('TOTAL') ? i : -1).filter(i=>i>=0);
+  const regSSCols = [];
+  columns.forEach((c,i)=>{ if (c.includes('REGULAR SS') || c.includes('REGULAR')) regSSCols.push(i); });
+
+  console.debug('Detected mpfCols=', mpfCols, 'ecCols=', ecCols, 'totalCols=', totalCols, 'regSSCols=', regSSCols);
+
+  // Heuristics for which MPF/EC map to Employer vs Employee:
+  // - if there are two MPF columns, decide by position relative to keywords EMPLOYER/EMPLOYEE in column header text:
+  const employerKeywords = ['EMPLOYER'];
+  const employeeKeywords = ['EMPLOYEE'];
+  function chooseSideIndex(candidates) {
+    if (candidates.length === 0) return {employer:-1, employee:-1};
+    if (candidates.length === 1) {
+      // single MPF column: determine by scanning headerRows to see whether the header mentions EMPLOYER or EMPLOYEE near it
+      const i = candidates[0];
+      const headerText = headerRows.map(r=> (r[i]||'')).join(' ').toUpperCase();
+      if (headerText.includes('EMPLOYER')) return {employer:i, employee:-1};
+      if (headerText.includes('EMPLOYEE')) return {employer:-1, employee:i};
+      // otherwise guess: if column index is left of center assume employer, else employee
+      return (i < maxCols/2) ? {employer:i, employee:-1} : {employer:-1, employee:i};
+    }
+    // two or more: find one that mentions EMPLOYER and one that mentions EMPLOYEE; else pick left one employer, right one employee
+    let empIdx=-1, eeIdx=-1;
+    for (const i of candidates) {
+      const h = headerRows.map(r=> (r[i]||'')).join(' ').toUpperCase();
+      if (h.includes('EMPLOYER')) empIdx = i;
+      if (h.includes('EMPLOYEE')) eeIdx = i;
+    }
+    if (empIdx===-1 || eeIdx===-1) {
+      // fallback: pick leftmost for employer, rightmost for employee
+      const sorted = candidates.slice().sort((a,b)=>a-b);
+      empIdx = sorted[0];
+      eeIdx = sorted[sorted.length-1];
+    }
+    return {employer:empIdx, employee:eeIdx};
+  }
+
+  const mpfMap = chooseSideIndex(mpfCols);
+  const ecMap = chooseSideIndex(ecCols);
+  // REGULAR SS: similarly map two regs (employer/employee)
+  const regMap = chooseSideIndex(regSSCols);
+
+  // For totals, we want: employerTotal, employeeTotal, grandTotal (there may be multiple 'TOTAL' columns)
+  // We'll choose totals by proximity: total column nearest mpf/reg/emp clusters
+  let employerTotalIdx = -1, employeeTotalIdx = -1, grandTotalIdx = -1;
+  if (totalCols.length) {
+    // try to assign employer/employee totals by checking header text for EMPLOYER/EMPLOYEE
+    for (const t of totalCols) {
+      const h = columns[t] || '';
+      if (h.includes('EMPLOYER')) employerTotalIdx = t;
+      else if (h.includes('EMPLOYEE')) employeeTotalIdx = t;
+      else if (h.includes('GRAND') || h.includes('CONTRIBUTION')) grandTotalIdx = t;
+    }
+    // fallback: left-most total near left side -> employer, middle -> employee, right -> grand
+    if (employerTotalIdx === -1 || employeeTotalIdx === -1) {
+      const sorted = totalCols.slice().sort((a,b)=>a-b);
+      if (sorted.length === 1) grandTotalIdx = sorted[0];
+      if (sorted.length === 2) { employerTotalIdx = sorted[0]; employeeTotalIdx = sorted[1]; }
+      if (sorted.length >=3) { employerTotalIdx = sorted[0]; employeeTotalIdx = sorted[1]; grandTotalIdx = sorted[sorted.length-1]; }
+    }
+  }
+
+  console.debug('mpfMap=', mpfMap, 'ecMap=', ecMap, 'regMap=', regMap, 'employerTotalIdx=', employerTotalIdx, 'employeeTotalIdx=', employeeTotalIdx, 'grandTotalIdx=', grandTotalIdx);
+
+  // begin parsing rows from first non-empty after header block
+  let dataStart = headerStart + headerRows.length;
+  for (let r = dataStart; r < Math.min(dataStart+30, rawRows.length); r++) {
+    const row = rawRows[r] || [];
+    if (row.some(c => c !== null && c !== undefined && String(c).trim() !== '')) { dataStart = r; break; }
+  }
+
+  const parsed = [];
+  let emptyStreak = 0;
+  for (let r = dataStart; r < rawRows.length; r++) {
+    const row = rawRows[r] || [];
+    const nonEmpty = row.some(c => c !== null && c !== undefined && String(c).trim() !== '');
+    if (!nonEmpty) { emptyStreak++; if (emptyStreak>8) break; else continue; }
+    emptyStreak = 0;
+
+    const getVal = i => (i>=0 && i<row.length) ? row[i] : '';
+
+    // Range handling: either in one range col or FROM/TO split
+    let rawRange = getVal(idxRange);
+    let rangeLow=null, rangeHigh=null;
+    if (rawRange===null || String(rawRange).trim()==='') {
+      if (idxFrom>=0 || idxTo>=0) {
+        const f = getVal(idxFrom); const t = getVal(idxTo);
+        rawRange = `${f||''}${(f&&t)?' - ':''}${t||''}`;
+        rangeLow = parseNum(f); rangeHigh = parseNum(t);
+      }
+    } else {
+      // if rawRange contains '-', split
+      if (String(rawRange).includes('-')) {
+        const parts = String(rawRange).split('-').map(s=>s.trim());
+        rangeLow = parseNum(parts[0]); rangeHigh = parseNum(parts[1]);
+      } else {
+        const n = parseNum(rawRange);
+        if (n!==null) { rangeLow = n; rangeHigh = n; }
+      }
+    }
+
+    // numeric picks
+    const monthlySalaryCredit = parseNum(getVal(idxMSC) || getVal(idxEmployeesComp));
+    const employeesComp = parseNum(getVal(idxEmployeesComp));
+    // employer/employee MPF & EC using mpfMap/ecMap
+    const employerMPF = mpfMap.employer !== -1 ? parseNum(getVal(mpfMap.employer)) : null;
+    const employeeMPF = mpfMap.employee !== -1 ? parseNum(getVal(mpfMap.employee)) : null;
+    const employerEC = ecMap.employer !== -1 ? parseNum(getVal(ecMap.employer)) : null;
+    const employeeEC = ecMap.employee !== -1 ? parseNum(getVal(ecMap.employee)) : null; // rarely present
+
+    const employerRegSS = regMap.employer !== -1 ? parseNum(getVal(regMap.employer)) : null;
+    const employeeRegSS = regMap.employee !== -1 ? parseNum(getVal(regMap.employee)) : null;
+
+    const employerTotal = employerTotalIdx !== -1 ? parseNum(getVal(employerTotalIdx)) : null;
+    const employeeTotal = employeeTotalIdx !== -1 ? parseNum(getVal(employeeTotalIdx)) : null;
+    const grandTotal = grandTotalIdx !== -1 ? parseNum(getVal(grandTotalIdx)) : null;
+
+    // compute fallbacks
+    const computedEmployerTotal = sumIgnoreNull([employerRegSS, employerMPF, employerEC, employerTotal]);
+    const computedEmployeeTotal = sumIgnoreNull([employeeRegSS, employeeMPF, employeeTotal]);
+    const computedGrand = sumIgnoreNull([computedEmployerTotal, computedEmployeeTotal, grandTotal]);
+
+    // push row
+    parsed.push({
+      rowIndex: r,
+      rawRange: rawRange,
+      rangeLow, rangeHigh,
+      monthlySalaryCredit, employeesComp,
+      employer: { regularSS: employerRegSS, mpf: employerMPF, ec: employerEC, total: employerTotal !== null ? employerTotal : computedEmployerTotal },
+      employee: { regularSS: employeeRegSS, mpf: employeeMPF, ec: employeeEC, total: employeeTotal !== null ? employeeTotal : computedEmployeeTotal },
+      totalContribution: grandTotal !== null ? grandTotal : computedGrand,
+      rawRow: row,
+      detectedColumns: columns
+    });
+  }
+
+  console.debug('parseTabulationWorkbook: parsed rows=', parsed.length);
+  return parsed;
+
+  // helpers
+  function parseNum(v) {
+    if (v === null || v === undefined) return null;
+    if (typeof v === 'number' && isFinite(v)) return v;
+    const s = String(v).trim();
+    if (!s || /^[-—–]$/.test(s)) return null;
+    // remove commas, currency symbols, spaces; handle parentheses
+    const isPar = /^\(.*\)$/.test(s);
+    let t = s.replace(/[^0-9\.\-\(\)]/g,'').replace(/\s+/g,'');
+    if (isPar) t = '-' + t.replace(/[()]/g,'');
+    const lastDot = t.lastIndexOf('.');
+    if (lastDot !== -1) {
+      const left = t.slice(0,lastDot).replace(/\./g,'');
+      const right = t.slice(lastDot+1).replace(/\./g,'');
+      t = left + '.' + right;
+    } else t = t.replace(/\./g,'');
+    const n = Number(t);
+    return Number.isFinite(n) ? n : null;
+  }
+  function sumIgnoreNull(arr) {
+    const nums = arr.filter(x => x !== null && x !== undefined && !Number.isNaN(x));
+    if (!nums.length) return null;
+    return nums.reduce((a,b)=>a+(b||0),0);
+  }
+}
+
+function renderPreviewFromParsed(parsedRows, container) {
+  if (!container) container = previewContainerModal || document.getElementById('sssPreviewTableContainer') || document.body;
+  container.innerHTML = '';
+
+  const wrapper = document.createElement('div'); wrapper.className = 'import-preview';
+  const table = document.createElement('table'); table.style.width = '100%'; table.style.borderCollapse = 'collapse';
+
+  const thead = document.createElement('thead');
+  const tr1 = document.createElement('tr');
+  const tr2 = document.createElement('tr');
+
+  const hdr = (text, opts = {}) => {
+    const th = document.createElement('th');
+    th.innerHTML = text;
+    if (opts.colspan) th.colSpan = opts.colspan;
+    if (opts.rowspan) th.rowSpan = opts.rowspan;
+    th.style.border = '1px solid #ddd'; th.style.padding = '6px'; th.style.background = opts.bg || '#e8f7d6'; th.style.fontWeight = '700'; th.style.textAlign = 'center';
+    return th;
+  };
+  // Top header: make Range of Compensation span TWO columns (from/to)
+  tr1.appendChild(hdr('RANGE OF COMPENSATION', {colspan:2}));
+  tr1.appendChild(hdr('MONTHLY SALARY CREDIT', {colspan:3}));
+  tr1.appendChild(hdr('EMPLOYER', {colspan:4}));
+  tr1.appendChild(hdr('EMPLOYEE', {colspan:3}));
+  tr1.appendChild(hdr('TOTAL', {rowspan:2}));
+
+  const sub = ['FROM', 'TO', 'EMPLOYEES COMPENSATION', 'MANDATORY PROVIDENT FUND', 'TOTAL', 'REGULAR SS', 'MPF', 'EC', 'TOTAL', 'REGULAR SS', 'MPF', 'TOTAL'];
+  for (let s of sub) { const th = hdr(s, {bg: '#fff'}); th.style.fontWeight = '700'; tr2.appendChild(th); }
+
+  thead.appendChild(tr1); thead.appendChild(tr2); table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  for (const r of parsedRows) {
+    const tr = document.createElement('tr');
+    const td = (v, css = '') => { const cell = document.createElement('td'); cell.innerHTML = (v === null || v === undefined || v === '') ? '' : String(v); cell.style.border = '1px solid #eee'; cell.style.padding = '6px'; if (css) cell.className = css; return cell; };
+
+    // Render two columns for range (from/to). Display '-' when a side is missing.
+    const fromTxt = (r.rangeLow !== null && r.rangeLow !== undefined) ? formatNum(r.rangeLow) : '-';
+    const toTxt = (r.rangeHigh !== null && r.rangeHigh !== undefined) ? formatNum(r.rangeHigh) : (r.rawRange || '');
+    tr.appendChild(td(fromTxt));
+    tr.appendChild(td(toTxt));
+    tr.appendChild(td(formatNum(r.monthlySalaryCredit)));
+    tr.appendChild(td(formatNum(r.employeesCompensation)));
+    tr.appendChild(td(formatNum(r.monthlySalaryCredit)));
+    tr.appendChild(td(formatNum(r.employerRegSS)));
+    tr.appendChild(td(formatNum(r.employerMPF)));
+    tr.appendChild(td(formatNum(r.employerEC)));
+    tr.appendChild(td(formatNum(r.employerTotal)));
+    tr.appendChild(td(formatNum(r.employeeRegSS)));
+    tr.appendChild(td(formatNum(r.employeeMPF)));
+    tr.appendChild(td(formatNum(r.employeeTotal)));
+    tr.appendChild(td(formatNum(r.totalContribution)));
+    tbody.appendChild(tr);
+  }
+
+  table.appendChild(tbody); wrapper.appendChild(table);
+  const info = document.createElement('div'); info.className = 'preview-info'; info.textContent = `Parsed rows: ${parsedRows.length}`; wrapper.appendChild(info);
+  container.appendChild(wrapper);
+
+  function formatNum(n) { if (n === null || n === undefined || n === '') return ''; return Number(n).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}); }
+}
+
 function setStatus(msg, isError = false) {
-  statusEl.textContent = msg || '';
-  statusEl.style.color = isError ? '#b00020' : '#333';
+  if (typeof statusEl !== 'undefined' && statusEl && statusEl !== null) {
+    try {
+      statusEl.textContent = msg || '';
+      statusEl.style.color = isError ? '#b00020' : '#333';
+    } catch (e) {
+      // defensive: ignore DOM write errors
+      console.warn('setStatus DOM update failed', e);
+    }
+  } else {
+    // fallback to console when no status element present
+    if (msg) {
+      if (isError) console.error(msg); else console.log(msg);
+    }
+  }
 }
 
 // Auto-initialize payroll on page load or when auth is ready
@@ -217,68 +527,8 @@ async function fetchMostRecentPayrollRates() {
 
 // ----------------------------------------------------------------
 // NEW: Fetch the most recent payroll run including rates, run meta and per-line notes
-// Returns: { ratesMap: Map(uid->ratePerDay), runMeta: { periodStart, periodEnd, note, id }, linesMap: Map(uid->lineData) }
+// (Implementation is the exported `fetchMostRecentPayrollRun` later in this file.)
 // ----------------------------------------------------------------
-async function fetchMostRecentPayrollRun() {
-  try {
-    // try createdAt, updatedAt, then documentId ordering as fallbacks
-    async function getMostRecentRunDoc() {
-      try {
-        let q1 = query(collection(db, 'payrolls'), orderBy('createdAt', 'desc'), limit(1));
-        let s1 = await getDocs(q1);
-        if (!s1.empty) return s1.docs[0];
-      } catch (e) { console.warn('createdAt query failed', e && e.message); }
-      try {
-        let q2 = query(collection(db, 'payrolls'), orderBy('updatedAt', 'desc'), limit(1));
-        let s2 = await getDocs(q2);
-        if (!s2.empty) return s2.docs[0];
-      } catch (e) { console.warn('updatedAt query failed', e && e.message); }
-      try {
-        let q3 = query(collection(db, 'payrolls'), orderBy(documentId(), 'desc'), limit(1));
-        let s3 = await getDocs(q3);
-        if (!s3.empty) return s3.docs[0];
-      } catch (e) { console.warn('documentId fallback failed', e && e.message); }
-      return null;
-    }
-
-    const payrollsSnapDoc = await getMostRecentRunDoc();
-    const ratesMap = new Map();
-    const linesMap = new Map();
-    let runMeta = null;
-    if (payrollsSnapDoc) {
-      const runDoc = payrollsSnapDoc;
-      const runId = runDoc.id;
-      const runData = runDoc.data() || {};
-      runMeta = {
-        id: runId,
-        periodStart: runData.periodStart || '',
-        periodEnd: runData.periodEnd || '',
-        note: runData.note || ''
-      };
-
-      const linesQ = query(collection(db, 'payrolls', runId, 'lines'));
-      const linesSnap = await getDocs(linesQ);
-      linesSnap.forEach(ld => {
-        const data = ld.data() || {};
-        const uid = ld.id;
-        // Prefer explicit ratePerDay; if missing but ratePerHour present, derive day rate (8 hrs)
-        if (data.ratePerDay !== undefined && data.ratePerDay !== null) {
-          ratesMap.set(uid, Number(data.ratePerDay));
-        } else if (data.ratePerHour !== undefined && data.ratePerHour !== null) {
-          const derived = Number(data.ratePerHour) * 8;
-          if (!isNaN(derived)) ratesMap.set(uid, derived);
-        }
-        // keep whole line data so we can read per-line note if present
-        linesMap.set(uid, data);
-      });
-    }
-
-    return { ratesMap, runMeta, linesMap };
-  } catch (err) {
-    console.warn('fetchMostRecentPayrollRun error', err);
-    return { ratesMap: new Map(), runMeta: null, linesMap: new Map() };
-  }
-}
 
 // Helper to pick appropriate rate for a user given the latestRates Map
 function pickRateForUser(latestRates, uid, userDoc) {
@@ -293,6 +543,10 @@ function pickRateForUser(latestRates, uid, userDoc) {
 // - auto-reload attendance when period dates change
 // ----------------------------------------------------------------
 async function initLivePayroll() {
+  if (!payrollBody) {
+    console.log('Payroll table not found on this page. Skipping logic.');
+    return;
+  }
   // 1) Fetch latest payroll run (rates + meta + lines) once
   const { ratesMap: latestRates, runMeta: latestRunMeta, linesMap: latestLines } = await fetchMostRecentPayrollRun();
 
@@ -357,7 +611,8 @@ async function initLivePayroll() {
     rows = usersList.map(u => {
       const uid = u.userId || u.id;
       const ratePerDay = (latestRates && latestRates.has(uid)) ? Number(latestRates.get(uid)) : Number(u.ratePerDay || u.baseRatePerDay || 0);
-      const seededNote = (typeof latestLines !== 'undefined' && latestLines && latestLines.has(uid) && latestLines.get(uid).note) ? latestLines.get(uid).note : (u.note || '');
+      const savedLine = (typeof latestLines !== 'undefined' && latestLines && latestLines.has(uid)) ? latestLines.get(uid) : null;
+      const seededNote = savedLine && savedLine.note ? savedLine.note : (u.note || '');
       return {
         userId: uid,
         username: u.username || u.displayName || u.email || '',
@@ -376,12 +631,14 @@ async function initLivePayroll() {
         philhealth: null,
         pagibig: null,
         stPeter: null,
-        sssSalaryLoan: 0,
-        hdmfSalaryLoan: 0,
-        hdmfCalamityLoan: 0,
-        cashAdvance: 0,
-        utLateHours: 0,
-        utLateAmount: 0,
+        sssSalaryLoan: Number((savedLine && savedLine['sss salary loan']) || 0),
+        // NEW: SSS Calamity Loan
+        sssCalamityLoan: Number((savedLine && savedLine['sss calamity loan']) || 0),
+        hdmfSalaryLoan: Number((savedLine && savedLine['hdmf salary loan']) || 0),
+        hdmfCalamityLoan: Number((savedLine && savedLine['hdmf calamity loan']) || 0),
+        cashAdvance: Number((savedLine && savedLine.cashAdvance) || 0),
+        utLateHours: Number((savedLine && savedLine['ut/late']) || 0),
+        utLateAmount: Number((savedLine && savedLine['ut/late amount']) || 0),
         note: seededNote,
         _manualGross: null,
         _manualDeductions: null,
@@ -395,8 +652,8 @@ async function initLivePayroll() {
       if (latestRunMeta) {
         const ps = document.getElementById('periodStart');
         const pe = document.getElementById('periodEnd');
-        if (ps && latestRunMeta.periodStart) ps.value = latestRunMeta.periodStart;
-        if (pe && latestRunMeta.periodEnd) pe.value = latestRunMeta.periodEnd;
+        if (ps && latestRunMeta.periodStart) ps.value = formatDateForInput(latestRunMeta.periodStart);
+        if (pe && latestRunMeta.periodEnd) pe.value = formatDateForInput(latestRunMeta.periodEnd);
       }
     } catch (e) { console.warn('failed to set period/note from latest run', e); }
 
@@ -456,7 +713,7 @@ async function initLivePayroll() {
             regularHolidayHours: 0,
             specialHolidayHours: 0,
             sss: null, philhealth: null, pagibig: null, stPeter: null,
-            sssSalaryLoan: 0, hdmfSalaryLoan: 0, hdmfCalamityLoan: 0, cashAdvance: 0,
+            sssSalaryLoan: 0, sssCalamityLoan: 0, hdmfSalaryLoan: 0, hdmfCalamityLoan: 0, cashAdvance: 0,
             utLateHours: 0, utLateAmount: 0, note: seededNote
           });
           dirty = true;
@@ -538,8 +795,8 @@ async function initLivePayroll() {
       if (freshRunMeta) {
         const ps = document.getElementById('periodStart');
         const pe = document.getElementById('periodEnd');
-        if (ps && freshRunMeta.periodStart) ps.value = freshRunMeta.periodStart;
-        if (pe && freshRunMeta.periodEnd) pe.value = freshRunMeta.periodEnd;
+        if (ps && freshRunMeta.periodStart) ps.value = formatDateForInput(freshRunMeta.periodStart);
+        if (pe && freshRunMeta.periodEnd) pe.value = formatDateForInput(freshRunMeta.periodEnd);
       }
     } catch (e) { console.warn('failed to set period/note from fresh run', e); }
     renderTable();
@@ -574,6 +831,384 @@ auth.onAuthStateChanged(user => {
   }
 });
 
+// The exported `fetchMostRecentPayrollRun` is implemented later in this file
+// and will attach itself to `window` for non-module pages. Removing the
+// temporary inline definition to avoid duplicate implementations.
+
+// -------------------------
+// Holidays: load, lookup, isHoliday
+// -------------------------
+import { /* ensure these are available for admin helpers */ } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
+
+// Load holidays doc once
+export async function loadHolidaysDoc() {
+  const ref = doc(db, 'payroll_settings', 'holidays');
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return { regularHolidays: [], specialHolidays: [] };
+  const data = snap.data();
+  return {
+    regularHolidays: data.regularHolidays || [],
+    specialHolidays: data.specialHolidays || []
+  };
+}
+
+// Build lookup sets/maps for quick check (for a given year).
+// Recurring holidays are matched by month-day (MM-DD)
+// Non-recurring holidays are matched by full YYYY-MM-DD.
+export function buildHolidayLookup({ regularHolidays = [], specialHolidays = [] } = {}) {
+  const regByFull = new Map();   // full date -> holiday obj (non-recurring)
+  const regByMD = new Map();     // month-day -> holiday obj (recurring)
+  const specByFull = new Map();
+  const specByMD = new Map();
+
+  function pushToMaps(list, byFull, byMD) {
+    for (const h of list || []) {
+      if (!h || !h.date) continue;
+      const full = h.date;
+      const md = full.slice(5); // "MM-DD"
+      // Treat missing `recurring` as recurring (legacy entries highlight every year).
+      const isRecurring = (typeof h.recurring === 'undefined') ? true : !!h.recurring;
+      if (isRecurring) {
+        const existing = byMD.get(md);
+        if (!existing) byMD.set(md, [h]);
+        else existing.push(h);
+      } else {
+        const existing = byFull.get(full);
+        if (!existing) byFull.set(full, [h]);
+        else existing.push(h);
+      }
+    }
+  }
+
+  pushToMaps(regularHolidays, regByFull, regByMD);
+  pushToMaps(specialHolidays, specByFull, specByMD);
+
+  return {
+    regByFull, regByMD, specByFull, specByMD
+  };
+}
+
+// Check if a JS Date (or date string "YYYY-MM-DD") is a holiday and return details.
+// Returns { isHoliday: boolean, kinds: ['regular'|'special'], items: [holiday objects] }
+export function isHoliday(dateInput, lookup) {
+  let yyyyMMdd;
+  if (typeof dateInput === 'string') yyyyMMdd = dateInput;
+  else {
+    const y = dateInput.getFullYear();
+    const m = String(dateInput.getMonth() + 1).padStart(2, '0');
+    const d = String(dateInput.getDate()).padStart(2, '0');
+    yyyyMMdd = `${y}-${m}-${d}`;
+  }
+  const md = yyyyMMdd.slice(5);
+
+  const items = [];
+  const kinds = new Set();
+
+  if (lookup.regByFull.has(yyyyMMdd)) {
+    items.push(...lookup.regByFull.get(yyyyMMdd));
+    kinds.add('regular');
+  }
+  if (lookup.regByMD.has(md)) {
+    items.push(...lookup.regByMD.get(md));
+    kinds.add('regular');
+  }
+  if (lookup.specByFull.has(yyyyMMdd)) {
+    items.push(...lookup.specByFull.get(yyyyMMdd));
+    kinds.add('special');
+  }
+  if (lookup.specByMD.has(md)) {
+    items.push(...lookup.specByMD.get(md));
+    kinds.add('special');
+  }
+
+  return { isHoliday: items.length > 0, kinds: Array.from(kinds), items };
+}
+
+// -------------------------
+// Admin helpers: add/toggle/remove holidays
+// -------------------------
+// Add a holiday (defaults to recurring: true)
+export async function addHoliday({ dateYMD, name, kind = 'regular', recurring = true, notes = '' }) {
+  const ref = doc(db, 'payroll_settings', 'holidays');
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    const payload = {
+      updatedAt: serverTimestamp(),
+      updatedBy: (auth.currentUser && auth.currentUser.uid) || null,
+      regularHolidays: [],
+      specialHolidays: []
+    };
+    await setDoc(ref, payload, { merge: true });
+  }
+
+  const field = (kind === 'special') ? 'specialHolidays' : 'regularHolidays';
+  const data = (await getDoc(ref)).data();
+  const arr = data[field] || [];
+  arr.push({ date: dateYMD, name, recurring, notes, monthDay: (dateYMD || '').slice(5) });
+  await updateDoc(ref, {
+    [field]: arr,
+    updatedAt: serverTimestamp(),
+    updatedBy: auth.currentUser ? auth.currentUser.uid : null
+  });
+}
+
+// Toggle recurring flag for a specific holiday (search by date+name)
+export async function toggleRecurring({ dateYMD, name, kind = 'regular', makeRecurring }) {
+  const ref = doc(db, 'payroll_settings', 'holidays');
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error('holidays doc missing');
+  const data = snap.data();
+  const field = (kind === 'special') ? 'specialHolidays' : 'regularHolidays';
+  const arr = data[field] || [];
+  const newArr = arr.map(h => {
+    if (h.date === dateYMD && (!name || h.name === name)) {
+      return { ...h, recurring: !!makeRecurring };
+    }
+    return h;
+  });
+  await updateDoc(ref, { [field]: newArr, updatedAt: serverTimestamp(), updatedBy: auth.currentUser.uid });
+}
+
+// Remove holiday
+export async function removeHoliday({ dateYMD, name, kind = 'regular' }) {
+  const ref = doc(db, 'payroll_settings', 'holidays');
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const data = snap.data();
+  const field = (kind === 'special') ? 'specialHolidays' : 'regularHolidays';
+  const newArr = (data[field] || []).filter(h => !(h.date === dateYMD && (!name || h.name === name)));
+  await updateDoc(ref, { [field]: newArr, updatedAt: serverTimestamp(), updatedBy: auth.currentUser.uid });
+}
+
+// Fetch the most recent payroll run and its lines.
+// Returns { runId, runMeta, linesMap }
+export async function fetchMostRecentPayrollRun() {
+  try {
+    const payrollsCol = collection(db, 'payrolls');
+    const q = query(payrollsCol, orderBy('createdAt', 'desc'), limit(1));
+    const snaps = await getDocs(q);
+    if (snaps.empty) return { runId: null, runMeta: null, linesMap: new Map() };
+    const runDoc = snaps.docs[0];
+    const runMeta = runDoc.data();
+    const runId = runDoc.id;
+
+    // Read lines subcollection
+    const linesCol = collection(db, 'payrolls', runId, 'lines');
+    const linesSnap = await getDocs(linesCol);
+    const linesMap = new Map();
+    linesSnap.forEach(d => {
+      const data = d.data();
+      // prefer explicit userId field, else use doc id
+      const uid = data.userId || d.id;
+      linesMap.set(uid, Object.assign({ id: d.id }, data));
+    });
+
+    // also expose as plain object for compatibility
+    const linesObj = {};
+    for (const [k,v] of linesMap) linesObj[k] = v;
+
+    // (window exposure moved outside the function to ensure availability
+    // at module evaluation time for non-module pages)
+
+    return { runId, runMeta, linesMap, linesObj };
+  } catch (err) {
+    console.error('fetchMostRecentPayrollRun failed', err);
+    throw err;
+  }
+}
+
+// Ensure non-module pages can call the helper immediately after this script loads.
+if (typeof window !== 'undefined' && typeof window.fetchMostRecentPayrollRun === 'undefined') {
+  window.fetchMostRecentPayrollRun = fetchMostRecentPayrollRun;
+}
+
+// === Holiday calendars (Regular & Special) ===
+// NOTE: `db`, `getDoc`, `setDoc`, and `serverTimestamp` are already imported above.
+
+// Config: Firestore doc path where holidays are stored
+const HOLIDAYS_DOC_PATH = { col: 'payroll_settings', doc: 'holidays' };
+
+// local caches (Set of ISO date strings)
+let regHolidays = new Set();
+let specHolidays = new Set();
+
+let regCalState = { year: (new Date()).getFullYear(), month: (new Date()).getMonth() }; // 0-based month
+let specCalState = { year: (new Date()).getFullYear(), month: (new Date()).getMonth() };
+
+async function loadHolidaysFromFirestore() {
+  try {
+    const ref = doc(db, HOLIDAYS_DOC_PATH.col, HOLIDAYS_DOC_PATH.doc);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      regHolidays = new Set();
+      specHolidays = new Set();
+      return;
+    }
+    const data = snap.data() || {};
+    regHolidays = new Set((data.regular || []).map(d => (new Date(d)).toISOString().slice(0,10)));
+    specHolidays = new Set((data.special || []).map(d => (new Date(d)).toISOString().slice(0,10)));
+  } catch (err) {
+    console.error('Failed to load holidays', err);
+  }
+}
+
+async function saveHolidaysToFirestore() {
+  try {
+    const ref = doc(db, HOLIDAYS_DOC_PATH.col, HOLIDAYS_DOC_PATH.doc);
+    await setDoc(ref, {
+      regular: Array.from(regHolidays),
+      special: Array.from(specHolidays),
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    showHolidayStatus('Saved holidays.');
+  } catch (err) {
+    console.error('Failed to save holidays', err);
+    showHolidayStatus('Save failed. See console.', true);
+  }
+}
+
+function showHolidayStatus(msg, isError = false) {
+  const el = document.getElementById('holidayStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = isError ? '#b91c1c' : '#2b6cb0';
+  setTimeout(()=>{ el.textContent = ''; }, 3500);
+}
+
+/* ---------- Calendar renderer ---------- */
+function renderCalendar(containerId, stateObj, selectedSet, monthLabelId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const year = stateObj.year, month = stateObj.month;
+  const firstDay = new Date(year, month, 1);
+  const startWeekday = firstDay.getDay(); // 0 Sun..6 Sat
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const prevDays = new Date(year, month, 0).getDate();
+
+  let html = '<table><thead><tr>';
+  const wkNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  for (const w of wkNames) html += `<th>${w}</th>`;
+  html += '</tr></thead><tbody>';
+
+  for (let r=0; r<6; r++) {
+    html += '<tr>';
+    for (let c=0; c<7; c++) {
+      const cellIndex = r*7 + c;
+      const dayNum = cellIndex - startWeekday + 1;
+      let cellHtml = '';
+      let cellClass = '';
+      let iso = '';
+      if (dayNum <= 0) {
+        const d = prevDays + dayNum;
+        const dt = new Date(year, month-1, d);
+        iso = dt.toISOString().slice(0,10);
+        cellHtml = `<div class="other-month">${d}</div>`;
+      } else if (dayNum > daysInMonth) {
+        const d = dayNum - daysInMonth;
+        const dt = new Date(year, month+1, d);
+        iso = dt.toISOString().slice(0,10);
+        cellHtml = `<div class="other-month">${d}</div>`;
+      } else {
+        const d = dayNum;
+        const dt = new Date(year, month, d);
+        iso = dt.toISOString().slice(0,10);
+        const short = d;
+        cellHtml = `<div class="this-month">${short}</div>`;
+        if (selectedSet.has(iso)) cellClass = 'selected-date';
+      }
+      html += `<td data-iso="${iso}" class="${cellClass}">${cellHtml}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
+
+  const label = document.getElementById(monthLabelId);
+  if (label) label.textContent = `${firstDay.toLocaleString(undefined,{month:'long'})} ${year}`;
+
+  container.querySelectorAll('td').forEach(td => {
+    td.addEventListener('click', async (ev) => {
+      const iso = td.getAttribute('data-iso');
+      if (!iso) return;
+      if (selectedSet.has(iso)) selectedSet.delete(iso);
+      else selectedSet.add(iso);
+      renderCalendar(containerId, stateObj, selectedSet, monthLabelId);
+      await saveHolidaysToFirestore();
+    });
+  });
+}
+
+/* ---------- wire calendar nav & controls ---------- */
+function setupCalendarControls() {
+  document.getElementById('regPrevMonth')?.addEventListener('click', () => {
+    regCalState.month--;
+    if (regCalState.month < 0) { regCalState.month = 11; regCalState.year--; }
+    renderCalendar('regHolidayCalendar', regCalState, regHolidays, 'regMonthLabel');
+  });
+  document.getElementById('regNextMonth')?.addEventListener('click', () => {
+    regCalState.month++;
+    if (regCalState.month > 11) { regCalState.month = 0; regCalState.year++; }
+    renderCalendar('regHolidayCalendar', regCalState, regHolidays, 'regMonthLabel');
+  });
+  document.getElementById('clearRegHolidays')?.addEventListener('click', async () => {
+    if (!confirm('Clear all Regular Holidays?')) return;
+    regHolidays.clear();
+    renderCalendar('regHolidayCalendar', regCalState, regHolidays, 'regMonthLabel');
+    await saveHolidaysToFirestore();
+  });
+
+  document.getElementById('specPrevMonth')?.addEventListener('click', () => {
+    specCalState.month--;
+    if (specCalState.month < 0) { specCalState.month = 11; specCalState.year--; }
+    renderCalendar('specHolidayCalendar', specCalState, specHolidays, 'specMonthLabel');
+  });
+  document.getElementById('specNextMonth')?.addEventListener('click', () => {
+    specCalState.month++;
+    if (specCalState.month > 11) { specCalState.month = 0; specCalState.year++; }
+    renderCalendar('specHolidayCalendar', specCalState, specHolidays, 'specMonthLabel');
+  });
+  document.getElementById('clearSpecHolidays')?.addEventListener('click', async () => {
+    if (!confirm('Clear all Special Holidays?')) return;
+    specHolidays.clear();
+    renderCalendar('specHolidayCalendar', specCalState, specHolidays, 'specMonthLabel');
+    await saveHolidaysToFirestore();
+  });
+}
+
+/* ---------- Utility helpers payroll should call ---------- */
+function normalizeToISODateOnly(d) {
+  const dt = new Date(d);
+  return dt.toISOString().slice(0,10);
+}
+function isRegHoliday(dateOrIso) {
+  const iso = (typeof dateOrIso === 'string') ? (new Date(dateOrIso)).toISOString().slice(0,10) : normalizeToISODateOnly(dateOrIso);
+  return regHolidays.has(iso);
+}
+function isSpecHoliday(dateOrIso) {
+  const iso = (typeof dateOrIso === 'string') ? (new Date(dateOrIso)).toISOString().slice(0,10) : normalizeToISODateOnly(dateOrIso);
+  return specHolidays.has(iso);
+}
+
+/* ---------- Init: load + render ---------- */
+(async function initHolidayPickers() {
+  try {
+    await loadHolidaysFromFirestore();
+    renderCalendar('regHolidayCalendar', regCalState, regHolidays, 'regMonthLabel');
+    renderCalendar('specHolidayCalendar', specCalState, specHolidays, 'specMonthLabel');
+    setupCalendarControls();
+  } catch (err) {
+    console.error('initHolidayPickers failed', err);
+  }
+})();
+
+// Export helper functions for other code (if module environment)
+window.payrollHolidays = {
+  isRegHoliday,
+  isSpecHoliday,
+  getRegHolidays: () => Array.from(regHolidays),
+  getSpecHolidays: () => Array.from(specHolidays)
+};
+
 // Optionally hide or disable the Load Users button since loading is automatic
 if (loadUsersBtn) {
   loadUsersBtn.style.display = 'none'; // hide; change to disable if you prefer
@@ -593,8 +1228,42 @@ function escapeHtml(s) {
   return String(s || '').replace(/[&<>\"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 
+// Helper: format various date/timestamp types to `yyyy-MM-dd` for input[type=date].
+function formatDateForInput(v) {
+  if (!v && v !== 0) return '';
+  // Already a proper string
+  if (typeof v === 'string') {
+    // Accept yyyy-mm-dd or ISO-like strings
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    const parsed = new Date(v);
+    if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0,10);
+    return '';
+  }
+  // Firestore Timestamp has toDate()
+  if (typeof v.toDate === 'function') {
+    const d = v.toDate();
+    return isNaN(d.getTime()) ? '' : d.toISOString().slice(0,10);
+  }
+  // Raw object with seconds/nanoseconds
+  if (v && typeof v === 'object' && (v.seconds !== undefined || v.nanoseconds !== undefined)) {
+    try {
+      const ms = Number(v.seconds || 0) * 1000 + Math.round((Number(v.nanoseconds || 0) / 1e6));
+      const d = new Date(ms);
+      return isNaN(d.getTime()) ? '' : d.toISOString().slice(0,10);
+    } catch (e) {
+      return '';
+    }
+  }
+  // Date object
+  if (v instanceof Date) {
+    return isNaN(v.getTime()) ? '' : v.toISOString().slice(0,10);
+  }
+  return '';
+}
+
 // RENDER: every column editable; automated values shown as placeholder
 function renderTable() {
+  if (!payrollBody) return;
   payrollBody.innerHTML = '';
 
   rows.forEach((r, idx) => {
@@ -652,6 +1321,7 @@ function renderTable() {
 
       <!-- loans -->
       <td><input class="input-small" data-field="sssSalaryLoan" data-id="${r.userId}" value="${escapeHtml(val('sssSalaryLoan'))}" placeholder="${escapeHtml(fmt(r.sssSalaryLoan || '0'))}" /></td>
+      <td><input class="input-small" data-field="sssCalamityLoan" data-id="${r.userId}" value="${escapeHtml(val('sssCalamityLoan'))}" placeholder="${escapeHtml(fmt(r.sssCalamityLoan || '0'))}" /></td>
       <td><input class="input-small" data-field="hdmfSalaryLoan" data-id="${r.userId}" value="${escapeHtml(val('hdmfSalaryLoan'))}" placeholder="${escapeHtml(fmt(r.hdmfSalaryLoan || '0'))}" /></td>
       <td><input class="input-small" data-field="hdmfCalamityLoan" data-id="${r.userId}" value="${escapeHtml(val('hdmfCalamityLoan'))}" placeholder="${escapeHtml(fmt(r.hdmfCalamityLoan || '0'))}" /></td>
       <td><input class="input-small" data-field="cashAdvance" data-id="${r.userId}" value="${escapeHtml(val('cashAdvance'))}" placeholder="${escapeHtml(fmt(r.cashAdvance || '0'))}" /></td>
@@ -682,7 +1352,7 @@ function renderTable() {
       // numeric fields list
       const numericFields = [
         'ratePerDay','daysWorked','hoursWorked','ndHours','ndOtHours','otHours','regularHolidayHours','specialHolidayHours',
-        'sss','philhealth','pagibig','stPeter','sssSalaryLoan','hdmfSalaryLoan','hdmfCalamityLoan','cashAdvance','utLateHours','utLateAmount',
+        'sss','philhealth','pagibig','stPeter','sssSalaryLoan','sssCalamityLoan','hdmfSalaryLoan','hdmfCalamityLoan','cashAdvance','utLateHours','utLateAmount',
         '_manualGross','_manualDeductions','_manualNet'
       ];
 
@@ -705,7 +1375,9 @@ function renderTable() {
     });
   });
 
-  rowsCountEl.textContent = String(rows.length);
+  if (typeof rowsCountEl !== 'undefined' && rowsCountEl && 'textContent' in rowsCountEl) {
+    rowsCountEl.textContent = String(rows.length);
+  }
 }
 
 // -------------------- Shift / ND helpers --------------------
@@ -740,7 +1412,9 @@ async function loadUsersAndAttendance() {
     const q = query(collection(db, 'users'), orderBy('username'));
     const snap = await getDocs(q);
     usersList = snap.docs.map(d => ({ userId: d.id, ...(d.data() || {}) }));
-    rows = usersList.map(u => ({
+    rows = usersList.map(u => {
+      const savedLine = (latestLines && latestLines.has(u.userId)) ? latestLines.get(u.userId) : null;
+      return {
       userId: u.userId || u.id,
       username: u.username || u.displayName || u.email || '',
       role: u.role || '',
@@ -759,27 +1433,29 @@ async function loadUsersAndAttendance() {
       philhealth: null,
       pagibig: null,
       stPeter: null,
-      sssSalaryLoan: 0,
-      hdmfSalaryLoan: 0,
-      hdmfCalamityLoan: 0,
-      cashAdvance: 0,
-      utLateHours: 0,
-      utLateAmount: 0,
+      sssSalaryLoan: Number((savedLine && savedLine['sss salary loan']) || 0),
+      sssCalamityLoan: Number((savedLine && savedLine['sss calamity loan']) || 0),
+      hdmfSalaryLoan: Number((savedLine && savedLine['hdmf salary loan']) || 0),
+      hdmfCalamityLoan: Number((savedLine && savedLine['hdmf calamity loan']) || 0),
+      cashAdvance: Number((savedLine && savedLine.cashAdvance) || 0),
+      utLateHours: Number((savedLine && savedLine['ut/late']) || 0),
+      utLateAmount: Number((savedLine && savedLine['ut/late amount']) || 0),
       // seed note from most recent run line if present, else use user doc note
-      note: ((latestLines && latestLines.has(u.userId) && latestLines.get(u.userId).note) ? latestLines.get(u.userId).note : (u.note || '')),
+      note: ((savedLine && savedLine.note) ? savedLine.note : (u.note || '')),
       _manualGross: null,
       _manualDeductions: null,
       _manualNet: null,
       adjustmentsCents: 0
-    }));
+    };
+    });
 
     // if we have a recent run meta, populate the period inputs
     try {
       if (latestRunMeta) {
         const ps = document.getElementById('periodStart');
         const pe = document.getElementById('periodEnd');
-        if (ps && latestRunMeta.periodStart) ps.value = latestRunMeta.periodStart;
-        if (pe && latestRunMeta.periodEnd) pe.value = latestRunMeta.periodEnd;
+        if (ps && latestRunMeta.periodStart) ps.value = formatDateForInput(latestRunMeta.periodStart);
+        if (pe && latestRunMeta.periodEnd) pe.value = formatDateForInput(latestRunMeta.periodEnd);
       }
     } catch (e) { console.warn('failed to set period from latest run', e); }
 
@@ -814,8 +1490,16 @@ async function loadAttendanceForRows(startDateStr, endDateStr) {
         orderBy('clockIn')
       );
       const snap = await getDocs(attQ);
+      const hadAttendance = snap && !snap.empty;
 
-      // reset
+      // If there is no attendance for this user in the selected period, preserve any
+      // manual values entered by the user (do not overwrite with zeros).
+      if (!hadAttendance) {
+        // leave r.* fields as-is and continue to next row
+        continue;
+      }
+
+      // reset (we have attendance rows and will compute fresh aggregates)
       r.daysWorked = 0;
       r.hoursWorked = 0;
       r.ndHours = 0;
@@ -823,6 +1507,9 @@ async function loadAttendanceForRows(startDateStr, endDateStr) {
       r.otHours = 0;
       r.regularHolidayHours = 0;
       r.specialHolidayHours = 0;
+      // reset UT/Late tracking (will be computed from per-day aggregation)
+      r.utLateHours = 0;
+      r.utLateAmount = 0;
 
       // aggregate per day (simple approach)
       const perDay = {};
@@ -855,15 +1542,31 @@ async function loadAttendanceForRows(startDateStr, endDateStr) {
         }
       }
 
+
       for (const k of Object.keys(perDay)) {
         const h = perDay[k];
         r.daysWorked += 1;
         r.hoursWorked += h;
         if (h > 8) r.otHours += (h - 8);
+
+        // UNDER-TIME / LATE detection (conservative default):
+        // If daily worked hours < 8, count the difference as UT/Late hours.
+        // (This is a simple rule; adjust if you have scheduled shift expected hours.)
+        if (h < 8) {
+          r.utLateHours = (r.utLateHours || 0) + (8 - h);
+        }
       }
 
       // estimate ndOtHours as min(ndHours, otHours)
       r.ndOtHours = Math.min(Number(r.ndHours || 0), Number(r.otHours || 0));
+
+      // Compute UT / LATE AMOUNT automatically using Rate/Day / 8 * utLateHours
+      // If ratePerDay is missing, leave utLateAmount at existing value (0)
+      if (Number(r.ratePerDay || 0) > 0) {
+        r.utLateAmount = (Number(r.ratePerDay) / 8) * (Number(r.utLateHours || 0));
+      } else {
+        r.utLateAmount = Number(r.utLateAmount || 0);
+      }
 
     } catch (err) {
       console.warn('attendance load error for', r.userId, err);
@@ -877,9 +1580,13 @@ async function loadAttendanceForRows(startDateStr, endDateStr) {
 // Calculate using computePayrollLine; computed values placed on r._calc
 function calculateAll() {
   rows.forEach(r => {
-    const sumLoans = Number(r.sssSalaryLoan || 0) + Number(r.hdmfSalaryLoan || 0) + Number(r.hdmfCalamityLoan || 0) + Number(r.cashAdvance || 0);
+    const sumLoans = Number(r.sssSalaryLoan || 0)
+             + Number(r.sssCalamityLoan || 0)  // added
+             + Number(r.hdmfSalaryLoan || 0)
+             + Number(r.hdmfCalamityLoan || 0)
+             + Number(r.cashAdvance || 0);
     const utLateAmt = Number(r.utLateAmount || 0);
-    const adjustmentsCents = toCents(sumLoans + utLateAmt) + (Number(r.adjustmentsCents || 0) ? Number(r.adjustmentsCents || 0) : 0);
+    const adjustmentsCents = toCents(sumLoans + utLateAmt) + Number(r.adjustmentsCents || 0);
 
     // determine payroll period days (if set in the UI) so we can scale statutory contributions
     const periodStartVal = (document.getElementById('periodStart') && document.getElementById('periodStart').value) || '';
@@ -903,8 +1610,12 @@ function calculateAll() {
       monthlySalaryEstimate = Number(r.ratePerHour) * 8 * 30;
     }
 
-    // Pass monthlySalary and periodScaling into computePayrollLine so statutory helpers are used
-    const sssOverride = findSssFromPayload(monthlySalaryEstimate);
+    // Only pass a monthlySalary estimate into statutory computations when there is actual work in the period.
+    // If days/hours are zero (no pay for the period), avoid using the monthly estimate which would trigger
+    // PhilHealth floor/ceiling logic and produce non-zero contributions even when gross is empty.
+    const hasWork = (Number(r.daysWorked || 0) > 0) || (Number(r.hoursWorked || 0) > 0);
+    const monthlySalaryForStat = hasWork ? monthlySalaryEstimate : null;
+    const sssOverride = findSssFromPayload(monthlySalaryForStat);
     // Pass sssOverride (PHP numbers) when available so computePayrollLine can use table values
     const calc = computePayrollLine({
       ratePerDay: r.ratePerDay || 0,
@@ -917,7 +1628,7 @@ function calculateAll() {
       regHolidayHours: r.regularHolidayHours || 0,
       specialHolidayHours: r.specialHolidayHours || 0,
       adjustmentsCents: adjustmentsCents,
-      monthlySalary: monthlySalaryEstimate,
+      monthlySalary: monthlySalaryForStat,
       periodScaling: periodScaling,
       manualPagibig: (r.pagibig !== undefined ? r.pagibig : null),
       sssOverride: sssOverride
@@ -968,7 +1679,7 @@ async function savePayrollRun() {
           otHours: r.otHours || 0,
           regHolidayHours: r.regularHolidayHours || 0,
           specialHolidayHours: r.specialHolidayHours || 0,
-          adjustmentsCents: toCents(Number(r.sssSalaryLoan || 0) + Number(r.hdmfSalaryLoan || 0) + Number(r.hdmfCalamityLoan || 0) + Number(r.cashAdvance || 0) + Number(r.utLateAmount || 0)),
+          adjustmentsCents: toCents(Number(r.sssSalaryLoan || 0) + Number(r.sssCalamityLoan || 0) + Number(r.hdmfSalaryLoan || 0) + Number(r.hdmfCalamityLoan || 0) + Number(r.cashAdvance || 0) + Number(r.utLateAmount || 0)),
           manualPagibig: (r.pagibig !== undefined ? r.pagibig : null),
           sssOverride: sssOverride
         });
@@ -1011,6 +1722,7 @@ async function savePayrollRun() {
 
         // loans & deductions — use UI overrides
         'sss salary loan': Number(r.sssSalaryLoan || 0),
+        'sss calamity loan': Number(r.sssCalamityLoan || 0),
         'hdmf salary loan': Number(r.hdmfSalaryLoan || 0),
         'hdmf calamity loan': Number(r.hdmfCalamityLoan || 0),
         cashAdvance: Number(r.cashAdvance || 0),
@@ -1045,7 +1757,7 @@ function exportCsv() {
     'userId','username','role','ratePerDay','ratePerHour','daysWorked','hoursWorked','ngHours','otHours',
     'regularHolidayHours','specialHolidayHours','grossPay','netPay',
     'sss','pag-ibig','philhealth','st.peter',
-    'sss salary loan','hdmf salary loan','hdmf calamity loan','cashAdvance',
+    'sss salary loan','sss calamity loan','hdmf salary loan','hdmf calamity loan','cashAdvance',
     'ut/late','ut/late amount'
   ];
   const rowsData = rows.map(r => {
@@ -1073,6 +1785,7 @@ function exportCsv() {
       (r.philhealth !== null && r.philhealth !== undefined) ? r.philhealth : philEmp,
       (r.stPeter !== null && r.stPeter !== undefined) ? r.stPeter : (breakdown['st.peter'] ?? breakdown.st_peter ?? ''),
       r.sssSalaryLoan || 0,
+      r.sssCalamityLoan || 0,
       r.hdmfSalaryLoan || 0,
       r.hdmfCalamityLoan || 0,
       r.cashAdvance || 0,
@@ -1099,24 +1812,35 @@ function exportCsv() {
   setStatus('CSV exported with period metadata.');
 }
 
-// Wiring
-loadUsersBtn.addEventListener('click', async () => {
-  loadUsersBtn.disabled = true;
-  await loadUsersAndAttendance();
-  loadUsersBtn.disabled = false;
-});
+// Wiring (defensive: only attach listeners if the elements exist on the page)
+if (typeof loadUsersBtn !== 'undefined' && loadUsersBtn && loadUsersBtn.addEventListener) {
+  loadUsersBtn.addEventListener('click', async () => {
+    loadUsersBtn.disabled = true;
+    await loadUsersAndAttendance();
+    loadUsersBtn.disabled = false;
+  });
+}
 
-calculateBtn.addEventListener('click', async () => {
-  const start = document.getElementById('periodStart').value;
-  const end = document.getElementById('periodEnd').value;
-  if (start && end) {
-    await loadAttendanceForRows(start, end);
-  }
-  calculateAll();
-});
+if (typeof calculateBtn !== 'undefined' && calculateBtn && calculateBtn.addEventListener) {
+  calculateBtn.addEventListener('click', async () => {
+    const periodStartEl = document.getElementById('periodStart');
+    const periodEndEl = document.getElementById('periodEnd');
+    const start = periodStartEl ? periodStartEl.value : '';
+    const end = periodEndEl ? periodEndEl.value : '';
+    if (start && end) {
+      await loadAttendanceForRows(start, end);
+    }
+    calculateAll();
+  });
+}
 
-saveRunBtn.addEventListener('click', savePayrollRun);
-exportCsvBtn.addEventListener('click', exportCsv);
+if (typeof saveRunBtn !== 'undefined' && saveRunBtn && saveRunBtn.addEventListener) {
+  saveRunBtn.addEventListener('click', savePayrollRun);
+}
+
+if (typeof exportCsvBtn !== 'undefined' && exportCsvBtn && exportCsvBtn.addEventListener) {
+  exportCsvBtn.addEventListener('click', exportCsv);
+}
 
 // Export hooks for testing/debugging
 export { loadUsersAndAttendance, loadAttendanceForRows, calculateAll, savePayrollRun, exportCsv };
@@ -1291,6 +2015,240 @@ function parseSheetToTable(worksheet) {
   return { table, headerRowIdx, header, colMap };
 }
 
+// File-specific parser + preview renderer for your Tabulation 2025.xlsx
+// Requires XLSX (SheetJS) to be loaded before this runs.
+
+async function parseTabulation2025File(file) {
+  if (!file) throw new Error('No file provided');
+  if (typeof XLSX === 'undefined') throw new Error('XLSX (SheetJS) not loaded');
+
+  const ab = await file.arrayBuffer();
+  const wb = XLSX.read(ab, { type: 'array', cellDates: true, defval: '' });
+
+  // pick the sheet named "Tabulation" or first sheet
+  const sheetName = wb.SheetNames.find(n => /tabulation|sss|tab/i.test(n)) || wb.SheetNames[0];
+  const ws = wb.Sheets[sheetName];
+
+  // get raw rows as arrays
+  const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+  // According to the uploaded file, headers are at rows index 1..2 (0-based),
+  // and data begins at row index 3. We'll use that mapping explicitly to avoid guessing.
+  const headerStart = 1;
+  const headerRowCount = 2;
+  const dataStart = headerStart + headerRowCount; // 3
+
+  // Map exact column indices found in your sheet:
+  const IDX = {
+    RANGE_FROM: 0,
+    RANGE_TO: 1,
+    MSC_EMP_COMP: 2,
+    MSC_MPF: 3,
+    MSC_TOTAL: 4,
+    EMPLOYER_REGULAR_SS: 5,
+    EMPLOYER_MPF: 6,
+    EMPLOYER_EC: 7,
+    EMPLOYER_TOTAL: 8,
+    EMPLOYEE_REGULAR_SS: 9,
+    EMPLOYEE_MPF: 10,
+    EMPLOYEE_TOTAL: 11,
+    GRAND_TOTAL: 12
+  };
+
+  function parseNum(v) {
+    if (v === null || v === undefined) return null;
+    if (typeof v === 'number' && isFinite(v)) return v;
+    let s = String(v).trim();
+    if (!s || /^[-—–]$/.test(s)) return null;
+    // remove non-number characters except ., -, parentheses
+    const isPar = /^\(.*\)$/.test(s);
+    s = s.replace(/[^0-9\.\-\(\)]/g, '');
+    if (isPar) s = '-' + s.replace(/[()]/g, '');
+    // fix multiple dots (keep last as decimal)
+    if ((s.match(/\./g) || []).length > 1) {
+      const parts = s.split('.');
+      s = parts.slice(0, -1).join('').replace(/\./g, '') + '.' + parts[parts.length - 1];
+    } else {
+      s = s.replace(/\./g, (m, i, st) => {
+        // if there's more than 3 digits before dot and no other dot, treat dot as decimal; otherwise leave (we handle below)
+        return '.';
+      });
+    }
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  const parsedRows = [];
+  for (let r = dataStart; r < raw.length; r++) {
+    const row = raw[r] || [];
+    // skip empty rows
+    if (!row.some(c => (c !== null && c !== undefined && String(c).trim() !== ''))) continue;
+
+    // read values by column index (we standardize missing to null)
+    const get = (i) => (i >= 0 && i < row.length) ? row[i] : '';
+
+    // Range handling (FROM/TO)
+    const rawFrom = get(IDX.RANGE_FROM);
+    const rawTo = get(IDX.RANGE_TO);
+    const rangeFrom = parseNum(rawFrom);
+    const rangeTo = parseNum(rawTo);
+
+    // numeric fields
+    const msc_emp_comp = parseNum(get(IDX.MSC_EMP_COMP));
+    const msc_mpf = parseNum(get(IDX.MSC_MPF));
+    const msc_total = parseNum(get(IDX.MSC_TOTAL));
+
+    const emp_reg = parseNum(get(IDX.EMPLOYER_REGULAR_SS));
+    const emp_mpf = parseNum(get(IDX.EMPLOYER_MPF));
+    const emp_ec = parseNum(get(IDX.EMPLOYER_EC));
+    const emp_total = parseNum(get(IDX.EMPLOYER_TOTAL));
+
+    const ee_reg = parseNum(get(IDX.EMPLOYEE_REGULAR_SS));
+    const ee_mpf = parseNum(get(IDX.EMPLOYEE_MPF));
+    const ee_total = parseNum(get(IDX.EMPLOYEE_TOTAL));
+
+    const grand_total = parseNum(get(IDX.GRAND_TOTAL));
+
+    // fallback compute totals if missing
+    const computedEmployerTotal = [emp_reg, emp_mpf, emp_ec].some(x => x != null) ? (Number(emp_reg || 0) + Number(emp_mpf || 0) + Number(emp_ec || 0)) : (emp_total != null ? emp_total : null);
+    const computedEmployeeTotal = [ee_reg, ee_mpf].some(x => x != null) ? (Number(ee_reg || 0) + Number(ee_mpf || 0)) : (ee_total != null ? ee_total : null);
+    const computedGrand = (computedEmployerTotal != null || computedEmployeeTotal != null) ? (Number(computedEmployerTotal || 0) + Number(computedEmployeeTotal || 0)) : (grand_total != null ? grand_total : null);
+
+    parsedRows.push({
+      rowIndex: r,
+      rangeFrom,
+      rangeTo,
+      msc_emp_comp,
+      msc_mpf,
+      msc_total,
+      employer: { regularSS: emp_reg, mpf: emp_mpf, ec: emp_ec, total: emp_total != null ? emp_total : computedEmployerTotal },
+      employee: { regularSS: ee_reg, mpf: ee_mpf, total: ee_total != null ? ee_total : computedEmployeeTotal },
+      totalContribution: grand_total != null ? grand_total : computedGrand,
+      rawRow: row
+    });
+  }
+
+  return { sheetName, parsedRows };
+}
+
+
+// Render preview that mirrors Excel grouped header layout
+function renderTabulationPreview(parsedRows, container) {
+  if (!container) container = document.getElementById('tabulationPreview') || document.body;
+  container.innerHTML = '';
+
+  const table = document.createElement('table');
+  table.style.width = '100%';
+  table.style.borderCollapse = 'collapse';
+  table.style.fontFamily = 'Arial, sans-serif';
+  table.style.fontSize = '13px';
+
+  // build header (top row groups + second-row subheaders)
+  const thead = document.createElement('thead');
+  const top = document.createElement('tr');
+  const sub = document.createElement('tr');
+
+  const makeTH = (txt, opts = {}) => {
+    const th = document.createElement('th');
+    th.innerHTML = txt;
+    if (opts.colspan) th.colSpan = opts.colspan;
+    if (opts.rowspan) th.rowSpan = opts.rowspan;
+    th.style.border = '1px solid #dcdcdc';
+    th.style.padding = '6px';
+    th.style.textAlign = 'center';
+    th.style.background = '#e8f7d6';
+    th.style.fontWeight = '700';
+    return th;
+  };
+
+  // top grouped headers
+  // Range of Compensation -> colspan 2 (FROM, TO)
+  top.appendChild(makeTH('RANGE OF COMPENSATION', { colspan: 2 }));
+  // Monthly Salary Credit -> Employees Compensation | Mandatory Provident Fund | Total
+  top.appendChild(makeTH('MONTHLY SALARY CREDIT', { colspan: 3 }));
+  // Employer group -> 4 subcols
+  top.appendChild(makeTH('EMPLOYER', { colspan: 4 }));
+  // Employee group -> 3 subcols
+  top.appendChild(makeTH('EMPLOYEE', { colspan: 3 }));
+  // Grand TOTAL column (right-most) — rowspan 2
+  top.appendChild(makeTH('TOTAL', { rowspan: 2 }));
+
+  // second/sub header row (must match colspan counts):
+  const subHeaders = [
+    'FROM', 'TO',
+    'EMPLOYEES COMPENSATION', 'MANDATORY PROVIDENT FUND', 'TOTAL',
+    'REGULAR SS', 'MPF', 'EC', 'TOTAL',
+    'REGULAR SS', 'MPF', 'TOTAL'
+  ];
+  for (const h of subHeaders) {
+    const th = document.createElement('th');
+    th.textContent = h;
+    th.style.border = '1px solid #dcdcdc';
+    th.style.padding = '6px';
+    th.style.textAlign = 'center';
+    th.style.background = '#ffffff';
+    th.style.fontWeight = '700';
+    sub.appendChild(th);
+  }
+
+  thead.appendChild(top);
+  thead.appendChild(sub);
+  table.appendChild(thead);
+
+  // body
+  const tbody = document.createElement('tbody');
+  const format = (v) => {
+    if (v === null || v === undefined || v === '') return '';
+    if (typeof v === 'number') return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const n = Number(String(v).replace(/[^0-9\.\-]/g, ''));
+    return Number.isFinite(n) ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : String(v);
+  };
+
+  for (const pr of parsedRows) {
+    const tr = document.createElement('tr');
+
+    // Range FROM, TO
+    const td = (v, align = 'right') => {
+      const cell = document.createElement('td');
+      cell.textContent = (v === null || v === undefined || v === '') ? '' : (typeof v === 'number' ? format(v) : String(v));
+      cell.style.border = '1px solid #eee';
+      cell.style.padding = '6px';
+      cell.style.textAlign = align;
+      return cell;
+    };
+
+    tr.appendChild(td(pr.rangeFrom, 'right'));
+    tr.appendChild(td(pr.rangeTo, 'right'));
+
+    // Monthly Salary Credit subcolumns:
+    // 1) Employees compensation (msc_emp_comp)
+    // 2) Mandatory Provident Fund (msc_mpf)
+    // 3) MSC total (msc_total or fallback to msc_emp_comp)
+    tr.appendChild(td(pr.msc_emp_comp, 'right'));
+    tr.appendChild(td(pr.msc_mpf, 'right'));
+    tr.appendChild(td(pr.msc_total != null ? pr.msc_total : pr.msc_emp_comp, 'right'));
+
+    // Employer: REGULAR SS, MPF, EC, TOTAL
+    tr.appendChild(td(pr.employer && pr.employer.regularSS, 'right'));
+    tr.appendChild(td(pr.employer && pr.employer.mpf, 'right'));
+    tr.appendChild(td(pr.employer && pr.employer.ec, 'right'));
+    tr.appendChild(td(pr.employer && (pr.employer.total != null ? pr.employer.total : '')));
+
+    // Employee: REGULAR SS, MPF, TOTAL
+    tr.appendChild(td(pr.employee && pr.employee.regularSS, 'right'));
+    tr.appendChild(td(pr.employee && pr.employee.mpf, 'right'));
+    tr.appendChild(td(pr.employee && (pr.employee.total != null ? pr.employee.total : '')));
+
+    // Grand TOTAL
+    tr.appendChild(td(pr.totalContribution, 'right'));
+
+    tbody.appendChild(tr);
+  }
+
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+
 inputEl && inputEl.addEventListener('change', async (ev) => {
   if (statusElSmall) statusElSmall.textContent = 'Parsing file...';
   if (previewContainerModal) previewContainerModal.innerHTML = '';
@@ -1298,13 +2256,11 @@ inputEl && inputEl.addEventListener('change', async (ev) => {
   try {
     const f = ev.target.files[0];
     if (!f) { if (statusElSmall) statusElSmall.textContent = 'No file selected.'; return; }
-    const buffer = await f.arrayBuffer();
-    const wb = XLSX.read(buffer, { type: 'array' });
-    // Use the strict 2025 Tabulation parser
-    const table = await parseTabulation2025(wb);
-    if (!table || table.length < 1) { if (statusElSmall) statusElSmall.textContent = 'No data rows parsed — ensure sheet "Tabulation" uses the 2025 layout.'; return; }
+    // Use the file-specific parser tailored to Tabulation 2025
+    const { sheetName, parsedRows } = await parseTabulation2025File(f);
+    if (!parsedRows || parsedRows.length < 1) { if (statusElSmall) statusElSmall.textContent = 'No data rows parsed — ensure the uploaded sheet contains tabulation rows.'; return; }
 
-    const checksum = await sha256Hex(JSON.stringify(table));
+    const checksum = await sha256Hex(JSON.stringify(parsedRows));
 
     currentPayload = {
       source: "upload",
@@ -1312,39 +2268,28 @@ inputEl && inputEl.addEventListener('change', async (ev) => {
       uploadedBy: (auth && auth.currentUser) ? auth.currentUser.uid : 'unknown',
       uploadedAt: serverTimestamp(),
       checksum,
-      table,
-      versionNote: 'SSS Tabulation 2025'
+      table: parsedRows,
+      versionNote: 'SSS Tabulation (parsed)'
     };
 
-    // build preview table (first 12 rows)
-    previewInfo && (previewInfo.textContent = `Parsed Tabulation sheet — ${table.length} rows. Showing first ${Math.min(12, table.length)} rows.`);
-    const tbl = document.createElement('table'); tbl.className = 'sss-table';
-    const hdr = document.createElement('tr');
-    ['#','rangeLabel','min','max','employee','employer','total'].forEach(h => { const th = document.createElement('th'); th.textContent = h; hdr.appendChild(th); });
-    tbl.appendChild(hdr);
-    table.slice(0,12).forEach((r,i)=>{
-      const tr = document.createElement('tr');
-      [i+1, r.rangeLabel, r.min, r.max, (r.employee && r.employee.regular !== undefined) ? r.employee.regular : (r.employee || ''), (r.employer && r.employer.regular !== undefined) ? r.employer.regular : (r.employer || ''), r.total].forEach(v=>{ const td = document.createElement('td'); td.textContent = v === null || v === undefined ? '' : String(v); tr.appendChild(td); });
-      tbl.appendChild(tr);
-    });
-    previewContainerModal && (previewContainerModal.innerHTML = '');
-    previewContainerModal && previewContainerModal.appendChild(tbl);
+    previewInfo && (previewInfo.textContent = `Parsed Tabulation sheet — ${parsedRows.length} rows (sheet: ${sheetName}).`);
+    renderTabulationPreview(parsedRows, previewContainerModal);
 
-    const missing = table.filter(row => {
-      const emp = row.employee && typeof row.employee === 'object' ? (row.employee.regular ?? row.employee.total ?? null) : row.employee;
-      const er = row.employer && typeof row.employer === 'object' ? (row.employer.regular ?? row.employer.total ?? null) : row.employer;
-      const tot = row.total;
+    const missing = parsedRows.filter(row => {
+      const emp = (row.employee && (row.employee.total ?? row.employee.regularSS)) ?? null;
+      const er = (row.employer && (row.employer.total ?? row.employer.regularSS)) ?? null;
+      const tot = row.totalContribution ?? null;
       return (emp === null || emp === undefined) && (er === null || er === undefined) && (tot === null || tot === undefined);
     }).length;
     if (missing > 0) {
       warnEl && (warnEl.style.display = 'block');
-      warnEl && (warnEl.textContent = `${missing} rows had no numeric employee/employer/total values. You may need to clean the sheet or confirm values.`);
+      warnEl && (warnEl.textContent = `${missing} rows had no numeric employer/employee/total values. You may need to clean the sheet or confirm values.`);
     } else {
       warnEl && (warnEl.style.display = 'none');
     }
 
     showModal();
-    if (statusElSmall) statusElSmall.textContent = `Parsed ${table.length} rows from "${f.name}". Preview shown.`;
+    if (statusElSmall) statusElSmall.textContent = `Parsed ${parsedRows.length} rows from "${f.name}". Preview shown.`;
   } catch (err) {
     console.error('Parsing error', err);
     if (statusElSmall) statusElSmall.textContent = 'Parsing failed: ' + (err && err.message ? err.message : String(err));

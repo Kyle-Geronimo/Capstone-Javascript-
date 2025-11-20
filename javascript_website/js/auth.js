@@ -117,8 +117,8 @@ export async function logout() {
     try {
         await signOut(auth);
         console.log('Logout successful');
-        // Redirect to home page - auth state change will update nav visibility
-        window.location.href = '/';
+        // Redirect to home page after logout
+        window.location.href = '/index.html';
     } catch (error) {
         console.error('Logout failed:', error);
         throw error;

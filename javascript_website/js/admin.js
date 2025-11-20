@@ -1,6 +1,6 @@
 import { auth, db } from './firebase-config.js';
 import {
-  collection, query, where, onSnapshot,
+  collection, query, where, onSnapshot, orderBy,
   updateDoc, doc, getDocs, getDoc, setDoc, deleteDoc,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
@@ -38,57 +38,74 @@ const API_BASE = (window.API_BASE && window.API_BASE.replace(/\/$/, '')) || 'htt
 export function watchRequestsRealtime() {
   const container = document.getElementById('requests');
   if (!container) return;
-  // Remove where('status', '==', 'pending') to show all requests
+
+  // make admin lists scrollable and styled
+  container.classList.add('admin-list');
+
   const q = collection(db, 'accountRequests');
+
   return onSnapshot(q, snapshot => {
     if (snapshot.empty) {
       container.innerHTML = '<em>No requests.</em>';
       return;
     }
+
+    // helper to format timestamp values
+    function formatTimestamp(v) {
+      if (!v) return 'Unknown date';
+      if (v.seconds !== undefined) return new Date(v.seconds * 1000).toLocaleString();
+      if (typeof v === 'number') return new Date(v).toLocaleString();
+      if (typeof v === 'string') return new Date(v).toLocaleString();
+      if (v instanceof Date) return v.toLocaleString();
+      return 'Unknown date';
+    }
+
     container.innerHTML = snapshot.docs.map(d => {
       const docData = d.data();
-      const username = docData.username || docData.email || '—';
+      const username = docData.username || docData.email || 'Unknown';
       const initials = getInitials(username);
       const avatarColor = getAvatarColor(initials);
-      // determine created/posted timestamp (supports `createdAt` or `timestamp` fields)
-      const created = docData.createdAt || docData.timestamp || docData.createdAtMillis || null;
-      function formatTimestamp(v) {
-        if (!v) return 'Unknown date';
-        // Firestore Timestamp
-        if (v.seconds !== undefined) return new Date(v.seconds * 1000).toLocaleString();
-        // milliseconds number
-        if (typeof v === 'number') return new Date(v).toLocaleString();
-        // ISO string
-        if (typeof v === 'string') return new Date(v).toLocaleString();
-        // Date object
-        if (v instanceof Date) return v.toLocaleString();
-        return 'Unknown date';
-      }
+
+      const created = docData.createdAt || docData.timestamp || null;
       const createdStr = formatTimestamp(created);
 
       return `
-        <div class="user-item request-item" data-id="${d.id}">
-          <div class="user-avatar" style="background: ${avatarColor}">
+        <div class="request-card" data-id="${d.id}">
+          <div class="request-avatar" style="background:${avatarColor}">
             ${initials}
           </div>
-          <div class="user-main">
-            <div class="user-name">${escapeHtml(username)}</div>
-            <div class="user-email">${escapeHtml(docData.email || '—')}</div>
-            <div class="user-meta">
-              <span class="user-role-badge pending-role">${docData.role || 'employee'} (Pending)</span>
-              <span class="user-note"><strong>Note:</strong> ${escapeHtml(docData.note || 'No additional notes')}</span>
-              <span class="user-date"><strong>Requested:</strong> ${escapeHtml(createdStr)}</span>
+
+          <div class="request-main">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+              <div>
+                <div style="font-weight:700;">${escapeHtml(username)}</div>
+                <div style="font-size:0.9rem;color:#4b5b7a;">${escapeHtml(docData.email || '')}</div>
+              </div>
+
+              <div style="text-align:right;">
+                <div style="font-size:0.85rem;color:#7a889f;">Requested</div>
+                <div style="font-weight:600;color:#123a80;">${escapeHtml(createdStr)}</div>
+              </div>
+            </div>
+
+            <div class="request-meta">
+              <span><strong>Role:</strong> ${escapeHtml(docData.role || 'employee')}</span>
+              <span><strong>Dept:</strong> ${escapeHtml(docData.department || docData.dept || '—')}</span>
+              <span><strong>Shift:</strong> ${escapeHtml(docData.shift || '—')}</span>
             </div>
           </div>
-          <div class="user-actions">
+
+          <div class="request-actions">
             <button class="approve-btn action-btn primary">Approve</button>
             <button class="reject-btn action-btn">Reject</button>
           </div>
         </div>
       `;
     }).join('');
+
     container.querySelectorAll('.approve-btn').forEach(b => b.addEventListener('click', onApprove));
     container.querySelectorAll('.reject-btn').forEach(b => b.addEventListener('click', onReject));
+
   }, err => {
     container.innerHTML = `<em>Error: ${escapeHtml(err.message)}</em>`;
   });
@@ -118,37 +135,53 @@ export async function loadAccounts() {
       container.innerHTML = '<em>No accounts found.</em>';
       return;
     }
-    const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    // Sort by role first (admins first), then by email
+    // Build users array correctly and include department & shift in UI
+    const users = snap.docs.map(d => {
+      const data = d.data() || {};
+      return {
+        id: d.id,
+        username: data.username || data.displayName || data.email || '',
+        email: data.email || '',
+        role: data.role || 'employee',
+        photoURL: data.photoURL || '',
+        department: data.department || '',
+        shift: data.shift || '',
+        qrDataURI: data.qrDataURI || ''
+      };
+    });
+
     users.sort((a, b) => {
       if (a.role === b.role) return (a.email || '').localeCompare(b.email || '');
       return a.role === 'admin' ? -1 : 1;
     });
 
+    // Render users list and include department & shift
     container.innerHTML = users.map(u => `
       <div class="user-item ${u.role === 'admin' ? 'admin-user' : ''}" data-id="${u.id}">
-        <div class="user-avatar" style="background: ${getAvatarColor(getInitials(u.username || u.email))}">
-          ${u.photoURL ? 
-            `<img src="${escapeHtml(u.photoURL)}" alt="${escapeHtml(u.username || '')}'s photo">` : 
-            getInitials(u.username || u.email)
-          }
-        </div>
-        <div class="user-qr-display">
-          ${u.qrDataURI
-            ? `<img src="${escapeHtml(u.qrDataURI)}" data-qr="${escapeHtml(u.qrDataURI)}" alt="QR for ${escapeHtml(u.username || u.email || '')}" class="user-qr-thumb clickable" />`
-            : `<div class="user-qr-thumb user-qr-placeholder">QR</div>`}
-        </div>
-        <div class="user-main">
-          <div class="user-name">${escapeHtml(u.username || '—')}</div>
-          <div class="user-email">${escapeHtml(u.email || '—')}</div>
-          <div class="user-meta">
-            <span class="user-role-badge ${u.role === 'admin' ? 'admin-role' : ''}">${escapeHtml(u.role || 'employee')}</span>
-            <span class="user-id"><strong>User ID:</strong> ${escapeHtml(u.id)}</span>
+        <div class="user-left">
+          <div class="user-avatar" style="background:${getAvatarColor(getInitials(u.username || u.email))}">
+            ${u.photoURL ? `<img src="${escapeHtml(u.photoURL)}" alt="avatar" style="width:100%;height:100%;object-fit:cover;border-radius:8px" />` : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff">${getInitials(escapeHtml(u.username || u.email))}</div>`}
+          </div>
+
+          <div class="user-main">
+            <div class="user-name">${escapeHtml(u.username || '—')}</div>
+            <div class="user-email">${escapeHtml(u.email || '—')}</div>
+            <div class="user-meta" style="font-size:12px;color:#666;margin-top:6px">
+              <span class="user-role-badge ${u.role === 'admin' ? 'admin-role' : ''}">${escapeHtml(u.role || 'employee')}</span>
+              <span style="margin-left:8px"><strong>Dept:</strong> ${escapeHtml(u.department || '—')}</span>
+              <span style="margin-left:8px"><strong>Shift:</strong> ${escapeHtml(u.shift || '—')}</span>
+            </div>
           </div>
         </div>
-        <div class="user-actions">
-          <button class="edit-btn action-btn">Edit</button>
-          <button class="archive-btn action-btn">Archive</button>
+
+        <div style="display:flex;align-items:center;gap:12px">
+          <div class="user-qr-display">
+            ${u.qrDataURI ? `<img src="${escapeHtml(u.qrDataURI)}" alt="QR" class="user-qr-thumb clickable" data-qr="${escapeHtml(u.qrDataURI)}" />` : `<div class="user-qr-placeholder">No QR</div>`}
+          </div>
+          <div class="user-actions">
+            <button class="edit-btn action-btn">Edit</button>
+            <button class="archive-btn action-btn">Archive</button>
+          </div>
         </div>
       </div>
     `).join('');
@@ -160,13 +193,126 @@ export async function loadAccounts() {
     // Attach QR thumbnail click handlers (open larger modal)
     container.querySelectorAll('.user-qr-thumb.clickable').forEach(img => {
       img.addEventListener('click', (e) => {
-        const src = e.currentTarget.dataset.qr;
+        const src = e.currentTarget.dataset.qr || e.currentTarget.src;
         if (src) showImageModal(src);
       });
     });
   } catch (err) {
     container.innerHTML = `<em>Error loading accounts: ${escapeHtml(err.message)}</em>`;
   }
+}
+
+// --- Add payroll view requests watcher + admin approve/deny handlers ---
+export function watchPayrollViewRequests() {
+  // ensure UI container exists (create right-column panel if not present)
+  let panel = document.getElementById('payroll-requests-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'payroll-requests-panel';
+    panel.className = 'requests-panel profile-card';
+    panel.style.width = '360px';
+    panel.style.marginLeft = '12px';
+    panel.style.maxHeight = '80vh';
+    panel.style.overflow = 'auto';
+    const accountRequestsPanel = document.getElementById('account-requests-panel') || document.getElementById('requests-panel');
+    if (accountRequestsPanel && accountRequestsPanel.parentNode) {
+      accountRequestsPanel.parentNode.insertBefore(panel, accountRequestsPanel.nextSibling);
+    } else {
+      const main = document.querySelector('.content-container') || document.body;
+      main.appendChild(panel);
+    }
+  }
+
+  panel.innerHTML = `<h3>Payroll View Requests</h3><div id="payrollRequestsList">Loading...</div>`;
+
+  // only show pending requests to admins (approved/denied are not listed)
+  // Query only by status (no orderBy) to avoid requiring a composite index while it builds.
+  const q = query(
+    collection(db, 'payrollViewRequests'),
+    where('status', '==', 'pending')
+  );
+  const unsub = onSnapshot(q, snap => {
+    const container = document.getElementById('payrollRequestsList');
+    if (!container) return;
+    if (snap.empty) {
+      container.innerHTML = '<div class="request-item">No pending payroll view requests.</div>';
+      return;
+    }
+
+    // Sort documents client-side by createdAt desc (handles Timestamp or number)
+    const docs = snap.docs.slice().sort((a, b) => {
+      const A = (a.data() && a.data().createdAt) ? (a.data().createdAt.toMillis ? a.data().createdAt.toMillis() : Number(a.data().createdAt)) : 0;
+      const B = (b.data() && b.data().createdAt) ? (b.data().createdAt.toMillis ? b.data().createdAt.toMillis() : Number(b.data().createdAt)) : 0;
+      return B - A;
+    });
+
+    container.innerHTML = docs.map(d => {
+      const r = d.data() || {};
+      const status = (r.status || 'pending');
+      return `
+        <div class="request-item" data-id="${d.id}" style="display:flex;align-items:center;justify-content:space-between;padding:8px;border-bottom:1px solid #eee">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600">${escapeHtml(r.username || r.userId)}</div>
+            <div style="font-size:12px;color:#666">${escapeHtml(r.department || '')} • ${escapeHtml(status)}</div>
+          </div>
+          <div style="display:flex;gap:6px;margin-left:8px">
+            <button class="approve-request-btn action-btn small" data-id="${d.id}" data-uid="${escapeHtml(r.userId)}" ${status==='approved' ? 'disabled' : ''}>Approve</button>
+            <button class="deny-request-btn action-btn small" data-id="${d.id}" ${status==='denied' ? 'disabled' : ''}>Deny</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    container.querySelectorAll('.approve-request-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const requestId = btn.dataset.id;
+        const uid = btn.dataset.uid;
+        if (!confirm('Approve this payroll view request?')) return;
+        try {
+          const reqRef = doc(db, 'payrollViewRequests', requestId);
+          await updateDoc(reqRef, { status: 'approved', approvedBy: auth.currentUser.uid, approvedAt: serverTimestamp() });
+          const userRef = doc(db, 'users', uid);
+          await updateDoc(userRef, { payrollViewAllowed: true, payrollViewAllowedAt: serverTimestamp() });
+          alert('Request approved.');
+        } catch (err) {
+          console.error('Approve failed', err);
+          alert('Failed to approve: ' + (err.message || err));
+        }
+      });
+    });
+
+    container.querySelectorAll('.deny-request-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const requestId = btn.dataset.id;
+        if (!confirm('Deny this payroll view request?')) return;
+        try {
+          const reqRef = doc(db, 'payrollViewRequests', requestId);
+          await updateDoc(reqRef, { status: 'denied', deniedBy: auth.currentUser.uid, deniedAt: serverTimestamp() });
+          alert('Request denied.');
+        } catch (err) {
+          console.error('Deny failed', err);
+          alert('Failed to deny: ' + (err.message || err));
+        }
+      });
+    });
+  }, err => {
+    console.error('payrollViewRequests listener failed', err);
+    const container = document.getElementById('payrollRequestsList');
+    if (container) {
+      // If Firestore requires an index it typically includes a console URL in the error message.
+      const msg = err && err.message ? String(err.message) : 'Failed to load requests';
+      // extract first URL if present
+      const urlMatch = msg.match(/https?:\/\/[^\s)]+/i);
+      let html = `<div class="request-item">Failed to load requests: ${escapeHtml(msg)}</div>`;
+      if (urlMatch && urlMatch[0]) {
+        const link = urlMatch[0];
+        html += `<div style="margin-top:8px;font-size:0.9rem;"><a href="${escapeHtml(link)}" target="_blank">Create required Firestore index</a></div>`;
+      }
+      container.innerHTML = html;
+    }
+  });
+
+  return unsub;
 }
 
 async function onApprove(e) {
@@ -393,6 +539,162 @@ async function onEditUser(e) {
     alert('Error editing user: ' + err.message);
   }
 }
+
+// --- Initialize payroll requests watcher once globals are ready ---
+(function initPayrollRequestsListener() {
+  function waitForGlobals(names, timeout = 10000, interval = 100) {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      (function poll() {
+        const ok = names.every(n => window[n]);
+        if (ok) return resolve();
+        if (Date.now() - start >= timeout) return reject(new Error('globals not ready: ' + names.join(',')));
+        setTimeout(poll, interval);
+      })();
+    });
+  }
+
+  (async () => {
+    try {
+      await waitForGlobals(['auth', 'db'], 10000, 150);
+      // call the admin panel watcher if available
+      if (typeof watchPayrollViewRequests === 'function') {
+        watchPayrollViewRequests();
+      } else {
+        console.warn('watchPayrollViewRequests() not found in admin.js — make sure function exists and is exported/defined.');
+      }
+    } catch (err) {
+      console.warn('Could not initialize payroll requests panel:', err);
+    }
+  })();
+})();
+
+// ---------- REPLACE old bootstrap block with this improved admin bootstrap ----------
+(function bootstrapPayrollRequestsPanel_v2() {
+  // create panel DOM immediately so admin sees something while we wait for firebase
+  function ensurePanelDom() {
+    let panel = document.getElementById('payroll-requests-panel');
+    if (panel) return panel;
+
+    const accountPanel = document.getElementById('account-requests-panel') || document.getElementById('requests-panel');
+    panel = document.createElement('div');
+    panel.id = 'payroll-requests-panel';
+    panel.className = 'requests-panel profile-card';
+    panel.style.width = '360px';
+    panel.style.minWidth = '280px';
+    panel.style.maxHeight = '78vh';
+    panel.style.overflow = 'auto';
+    panel.style.padding = '12px';
+    panel.innerHTML = `<h3 style="margin:0 0 8px 0;">Payroll View Requests</h3><div id="payrollRequestsList">Waiting for admin auth...</div>`;
+
+    if (accountPanel && accountPanel.parentNode) {
+      accountPanel.parentNode.insertBefore(panel, accountPanel.nextSibling);
+      console.log('Inserted payroll requests panel next to account-requests panel.');
+    } else {
+      const main = document.querySelector('.content-container') || document.querySelector('main') || document.body;
+      main.appendChild(panel);
+      console.log('Appended payroll requests panel to main container (fallback).');
+    }
+    return panel;
+  }
+
+  // short helper to wait for a window global, with small interval loop
+  function waitForGlobal(name, timeout = 10000, interval = 150) {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      (function poll() {
+        if (window[name]) return resolve(window[name]);
+        if (Date.now() - start >= timeout) return reject(new Error(`${name} not ready after ${timeout}ms`));
+        setTimeout(poll, interval);
+      })();
+    });
+  }
+
+  (function init() {
+    const panel = ensurePanelDom();
+    const listEl = document.getElementById('payrollRequestsList');
+
+    // If auth is not yet defined, use onAuthStateChanged (this will fire as soon as firebase-auth finishes initializing)
+    // If auth is already present, we still use onAuthStateChanged to get reliable sign-in state.
+    // If auth never becomes available, we fallback after 12s with a visible error message.
+    const authReadyTimeout = 12000;
+    let authReadyTimer = setTimeout(() => {
+      console.warn('Auth not ready within timeout; payroll panel will display a message.');
+      if (listEl) listEl.innerText = 'Unable to initialize payroll panel (auth not available).';
+    }, authReadyTimeout);
+
+    // Use whichever auth global exists (or wait until it appears)
+    (function attachAuthListener() {
+      // If auth exists now, attach listener
+      if (window.auth && typeof window.auth.onAuthStateChanged === 'function') {
+        clearTimeout(authReadyTimer);
+        window.auth.onAuthStateChanged(async (user) => {
+          try {
+            if (!user) {
+              // user not signed-in; show message but keep panel visible
+              if (listEl) listEl.innerText = 'Sign in as admin to review payroll view requests.';
+              console.log('Admin not signed-in; waiting for admin sign-in to load payroll requests.');
+              return;
+            }
+
+            // user is signed-in; ensure db exists (short wait)
+            let db = window.db;
+            if (!db) {
+              try {
+                db = await waitForGlobal('db', 8000, 150); // wait up to 8s for db
+              } catch (err) {
+                console.error('Database (db) not available after sign-in:', err);
+                if (listEl) listEl.innerText = 'Signed in but database not ready. Please reload or try again in a moment.';
+                return;
+              }
+            }
+
+            // At this point auth and db should be available; start the watcher
+            if (typeof watchPayrollViewRequests === 'function') {
+              // clear any placeholder text
+              if (listEl) listEl.innerText = 'Loading payroll view requests...';
+              try {
+                watchPayrollViewRequests();
+                console.log('watchPayrollViewRequests() started after auth sign-in.');
+              } catch (err) {
+                console.error('Error starting watchPayrollViewRequests():', err);
+                if (listEl) listEl.innerText = 'Error starting payroll watcher. Check console for details.';
+              }
+            } else {
+              // Try dynamic import fallback if the watch function is exported in a module file
+              try {
+                // Adjust the path below if your admin watcher is in a different module file
+                const mod = await import('/path/to/admin.js');
+                if (typeof mod.watchPayrollViewRequests === 'function') {
+                  if (listEl) listEl.innerText = 'Loading payroll view requests...';
+                  mod.watchPayrollViewRequests();
+                  console.log('watchPayrollViewRequests() started via dynamic import.');
+                } else {
+                  console.warn('watchPayrollViewRequests() not found in module import.');
+                  if (listEl) listEl.innerText = 'Payroll watcher not available (function missing).';
+                }
+              } catch (impErr) {
+                console.error('Dynamic import fallback failed for admin.js:', impErr);
+                if (listEl) listEl.innerText = 'Failed to start payroll watcher (import error).';
+              }
+            }
+          } finally {
+            // no-op
+          }
+        });
+        return;
+      }
+
+      // If auth global doesn't exist yet, poll briefly for it (but we already have a timeout)
+      waitForGlobal('auth', authReadyTimeout, 200).then(() => {
+        clearTimeout(authReadyTimer);
+        attachAuthListener(); // recursive: will attach now that auth exists
+      }).catch(() => {
+        // handled by outer timeout
+      });
+    })();
+  })();
+})();
 
 async function onArchiveUser(e) {
   const id = e.target.closest('[data-id]').dataset.id;

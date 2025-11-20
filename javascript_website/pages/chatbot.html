@@ -37,25 +37,25 @@
     import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
     import { loadChatbotData } from '../js/chatbot.js';
 
-    // Check if user is authenticated
+
     auth.onAuthStateChanged((user) => {
       updateNavVisibility();
       highlightActiveNavBtn();
       
       const container = document.getElementById('chatbot-data');
       if (!user) {
-        // If not authenticated, show login message
+
         if (container) {
           container.innerHTML = '<div class="auth-message"><p>Please log in to view hotel information.</p></div>';
         }
-        // Redirect to login page after a short delay
+
         setTimeout(() => {
           window.location.href = 'login.html';
         }, 2000);
         return;
       }
 
-      // If authenticated, load the hotel data
+
       loadChatbotData();
     });
   </script>

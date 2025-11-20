@@ -23,7 +23,6 @@ A web-based workplace dashboard for managing chatbot modules, user profiles, aut
 
 ```
 javascript_website/
-├── .firebaserc
 ├── .gitignore
 ├── css/
 │   └── styles.css
@@ -55,7 +54,7 @@ javascript_website/
 │   ├── sss-table.js
 │   └── weather.js
 ├── launch.json
-├── adminsdk
+├── mariners-hotellink-firebase-adminsdk-fbsvc-65bfc6c5b7.json
 ├── node_modules/
 ├── package-lock.json
 ├── package.json
@@ -69,10 +68,6 @@ javascript_website/
 │   ├── qr-dashboard.html
 │   ├── reset-password.html
 │   └── signup.html
-├── public/
-│   ├── assets/
-│   └── vendor/
-│       └── html5-qrcode.min.js
 ├── server.js
 └── vendor/
   └── html5-qrcode.min.js
@@ -126,18 +121,18 @@ javascript_website/
 
   Start the admin server (from your project root). In PowerShell run:
   ```powershell
-  cd C:\Users\chaos\a\Version9\javascript_website
+  cd C:\Users\chaos\a\Version7\javascript_website
   node server.js
   ```
 
 5. **Get Admin SDK Credentials:**
    - Go to Firebase Console → Project Settings → Service Accounts
    - Click "Generate New Private Key"
-   - Save the JSON file as `serviceAccountKey.json` (or your provider-named JSON, e.g. `adminsdk.json`) in your project root
+   - Save the JSON file as `serviceAccountKey.json` (or your provider-named JSON, e.g. `mariners-hotellink-firebase-adminsdk-fbsvc-65bfc6c5b7.json`) in your project root
    - Add the credentials file to `.gitignore` (example names below):
      ```
      serviceAccountKey.json
-     adminsdk.json
+     mariners-hotellink-firebase-adminsdk-fbsvc-65bfc6c5b7.json
      node_modules/
      ```
 
@@ -167,141 +162,119 @@ javascript_website/
     service cloud.firestore {
     match /databases/{database}/documents {
 
-    // -----------------------
-    // Helper functions
-    // -----------------------
+    // Helper: check if user is signed in
     function isSignedIn() {
       return request.auth != null;
     }
 
+    // Helper: check if user is admin
     function isAdmin() {
-      return isSignedIn() &&
-        (request.auth.token.admin == true ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    // Helper: check if user is an employee/staff
     function isEmployee() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'employee';
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'employee';
     }
 
-    // -----------------------
-    // Payroll runs + lines
-    // -----------------------
+    // -------------------------
+    // Account requests (public create)
+    // -------------------------
+    match /accountRequests/{requestId} {
+      // Anyone may submit a signup request
+      allow create: if true;
+      // Only admins can read/update/delete requests
+      allow read, update, delete: if isAdmin();
+    }
+
+    // -------------------------
+    // Users collection
+    // -------------------------
+    match /users/{userId} {
+      // Signed-in users can read profiles (tweak if you want tighter privacy)
+      allow read: if isSignedIn();
+
+      // Create: allow a user to create their own profile document
+      allow create: if isSignedIn() && request.auth.uid == userId;
+
+      // Update/delete: owner or admin can modify
+      allow update, delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+
+      // Admins can also write to users collection
+      allow write: if isAdmin();
+    }
+
+    // -------------------------
+    // Archived users (admin-only)
+    // -------------------------
+    match /archivedUsers/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------
+    // Attendance
+    // -------------------------
+    match /attendance/{docId} {
+      // Signed-in users can read attendance (adjust if you prefer more restriction)
+      allow read: if isSignedIn();
+
+      // Create: allow user to create their own attendance record (use request.resource for incoming data)
+      allow create: if isSignedIn() && (request.auth.uid == request.resource.data.userId || isAdmin());
+
+      // Update: owner or admin can update (resource exists on update)
+      allow update: if isSignedIn() && (request.auth.uid == resource.data.userId || isAdmin());
+
+      // Delete: admin-only
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------
+    // Payroll runs (top-level collection "payrolls")
+    // -------------------------
     match /payrolls/{payrollId} {
+      // Admins create payroll runs
       allow create: if isAdmin();
-      allow read:   if isAdmin() || (resource.data.createdBy == request.auth.uid);
+
+      // Read run metadata: admins or the creator
+      allow read: if isAdmin() || (resource.data.createdBy == request.auth.uid);
+
+      // Update/delete: admin only
       allow update, delete: if isAdmin();
 
+      // Lines subcollection rules (see below)
       match /lines/{lineId} {
-        // lineId is the employee UID in your existing design
-        allow read: if isAdmin() || (isSignedIn() && request.auth.uid == lineId);
+        // Admins can read all lines; employee can read their own line (document id = their uid)
+        allow read: if isAdmin() || (request.auth != null && request.auth.uid == lineId);
+
+        // Writes to payroll lines are admin-only (prevents users from spoofing lines)
         allow create, update, delete: if isAdmin();
       }
     }
 
-    // -----------------------
-    // Payroll View Requests
-    // -----------------------
-    match /payrollViewRequests/{reqId} {
-      // Create: signed-in user can create a request for themselves
-      allow create: if isSignedIn()
-                    && request.resource.data.userId == request.auth.uid
-                    && request.resource.data.username is string
-                    && request.resource.data.status == 'pending';
-
-      // Read: admins can list/read all; user can read their own requests
-      allow get, list: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
-
-      // Update/Delete: only admins
-      // Prevent changing userId on updates by checking it stays the same
-      allow update, delete: if isSignedIn() && isAdmin()
-                            && request.resource.data.userId == resource.data.userId;
-    }
-
-    // -----------------------
-    // Payroll settings (holidays)
-    // -----------------------
-    // Path: payroll_settings/holidays (and other payroll_settings docs)
-    match /payroll_settings/{docId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && isAdmin();
-    }
-
-    // -----------------------
-    // SSS Contribution Table (config)
-    // -----------------------
-    match /config/sssContributionTable {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && isAdmin();
-    }
-
-    match /config/sssContributionTable/history/{docId} {
-      allow read: if isSignedIn() && isAdmin();
-      allow write: if false;
-    }
-
-    // -----------------------
-    // Account Requests
-    // -----------------------
-    match /accountRequests/{requestId} {
-      allow create: if isSignedIn();
-      allow read, update, delete: if isSignedIn() && isAdmin();
-    }
-
-    // -----------------------
-    // Users
-    // -----------------------
-    match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update, delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-    }
-
-    // -----------------------
-    // Archived Users
-    // -----------------------
-    match /archivedUsers/{docId} {
-      allow read, write: if isSignedIn() && isAdmin();
-    }
-
-    // -----------------------
-    // Attendance
-    // -----------------------
-    match /attendance/{docId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && (request.auth.uid == request.resource.data.userId || isAdmin());
-      allow update: if isSignedIn() && (request.auth.uid == resource.data.userId || isAdmin());
-      allow delete: if isSignedIn() && isAdmin();
-    }
-
-    // -----------------------
-    // Payroll Batches
-    // -----------------------
+    // -------------------------
+    // Payroll batches (admin-only)
+    // -------------------------
     match /payrollBatches/{batchId} {
-      allow read, write, delete: if isSignedIn() && isAdmin();
+      allow read, write, delete: if isAdmin();
     }
 
-    // -----------------------
-    // Chatbot Inquiries
-    // -----------------------
+    // -------------------------
+    // Chatbot inquiries
+    // -------------------------
     match /chatbot/{docId} {
+      // Any signed-in user may create
       allow create: if isSignedIn();
-      allow read: if isSignedIn() && (isAdmin() || isEmployee());
-      allow update, delete: if isSignedIn() && isAdmin();
+
+      // Admins and employees may read (adjust if needed)
+      allow read: if isAdmin() || isEmployee();
+
+      // Only admins can edit or delete
+      allow update, delete: if isAdmin();
     }
 
-    // -----------------------
-    // Hotels
-    // -----------------------
-    match /hotel/{docId} {
-      allow read: if true;
-      allow write: if isSignedIn() && (isAdmin() || isEmployee());
-    }
-
-    // -----------------------
-    // Default deny everything else
-    // -----------------------
+    // Default: deny everything else
     match /{document=**} {
       allow read, write: if false;
     }
@@ -312,90 +285,6 @@ javascript_website/
 9. **Add Authorized Domains:**
    - Go to Authentication → Settings → Authorized domains
    - Add: `localhost` and `127.0.0.1`
-
-  **Firestore Schema**
-
-  - **`users` collection:** User profiles and roles. Pages: `signup.html`, `login.html`, `profile.html`, `admin.html`, `archives.html`.
-    - `displayName`: string
-    - `email`: string
-    - `role`: string (e.g., `admin`, `employee`, `user`)
-    - `photoURL`: string (URL)
-    - `createdAt`: timestamp
-    - `approved`: boolean
-    - `meta`: map (freeform additional metadata)
-
-  - **`accountRequests` collection:** Signup requests awaiting admin approval. Pages: `signup.html`, `admin.html`.
-    - `username`: string
-    - `email`: string
-    - `requestedRole`: string
-    - `reason`: string
-    - `status`: string (`pending`, `approved`, `rejected`)
-    - `createdAt`: timestamp
-
-  - **`archivedUsers` collection:** Archived/removed user snapshots. Pages: `archives.html`, `admin.html`.
-    - (same fields as `users`) plus:
-    - `archivedAt`: timestamp
-    - `archivedBy`: string (admin UID)
-    - `archiveReason`: string
-
-  - **`attendance` collection:** Employee attendance records. Pages: `payroll.html`, `profile.html`, `admin.html`.
-    - `userId`: string (UID)
-    - `date`: timestamp or string (ISO date)
-    - `checkIn`: timestamp
-    - `checkOut`: timestamp
-    - `status`: string (`present`, `absent`, `on_leave`)
-    - `location`: string (optional)
-    - `notes`: string (optional)
-
-  - **`payrolls` collection:** Payroll runs. Pages: `payroll.html`, `admin.html`, `qr-dashboard.html`.
-    - `createdBy`: string (admin UID)
-    - `createdAt`: timestamp
-    - `periodStart`: timestamp
-    - `periodEnd`: timestamp
-    - `totalAmount`: number (cents recommended integer)
-    - `status`: string (`draft`, `posted`, `completed`)
-    - `meta`: map
-    - Subcollection `lines` (per payroll):
-      - document id = `lineId` (typically employee UID)
-      - `username`: string
-      - `grossPay`: number
-      - `netPay`: number
-      - `deductions`: map (name: number)
-      - `daysWorked`: number
-
-  - **`payrollBatches` collection:** Grouped payroll runs for batch operations. Pages: `payroll.html`, `admin.html`.
-    - `batchName`: string
-    - `payrollIds`: array of strings
-    - `createdAt`: timestamp
-    - `createdBy`: string
-
-  - **`payrollViewRequests` collection:** Employee requests to view payrolls. Pages: `payroll.html`, `admin.html`.
-    - `userId`: string
-    - `username`: string
-    - `status`: string (`pending`, `approved`, `denied`)
-    - `createdAt`: timestamp
-
-  - **`config/sssContributionTable` document:** SSS contribution lookup table. Pages: `payroll.html`.
-    - `salaryMin`: number
-    - `salaryMax`: number
-    - `employeeShare`: number
-    - `employerShare`: number
-    - `total`: number
-
-  - **`chatbot` collection:** Chatbot inquiries and responses. Pages: `chatbot.html`, `admin.html`.
-    - `userId`: string
-    - `question`: string
-    - `response`: string
-    - `createdAt`: timestamp
-    - `status`: string (`new`, `in_progress`, `resolved`)
-    - `meta`: map
-
-  - **`hotel` collection:** Hotel records used by various pages. Pages: `admin.html`, `profile.html`, general listing pages.
-    - `name`: string
-    - `address`: string
-    - `images`: array of strings (URLs)
-    - `rating`: number
-    - `createdBy`: string
 
 ## Usage
 

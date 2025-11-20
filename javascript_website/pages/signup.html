@@ -5,7 +5,6 @@
   <title>HotelLink - Sign Up</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../css/styles.css">
-  <!-- moved small page-specific styles into ../css/styles.css -->
 </head>
 <body>
   <header>
@@ -19,7 +18,7 @@
   </header>
 
   <main>
-    <section class="page">
+    <section class="auth-page signup-page">
       <div class="form-container">
         <h2>Sign Up</h2>
         <label for="signup-username">Full Name</label>
@@ -61,10 +60,10 @@
     import { updateNavVisibility } from '../js/nav-control.js';
     import { initShowPassword } from '../js/show-password.js';
 
-    // Update navigation on load
+
     updateNavVisibility();
     
-    // Initialize show password toggle
+
     initShowPassword();
 
     document.getElementById('signup-btn').addEventListener('click', async () => {
@@ -74,7 +73,7 @@
       const password = document.getElementById('signup-password').value;
       const role = document.getElementById('signup-role').value;
 
-      // Basic client-side validation
+
       if (!email || !password) {
         alert('Please enter email and password');
         return;
@@ -84,14 +83,9 @@
       btn.textContent = 'Submitting...';
 
       try {
-        // Call the existing signup helper which writes to accountRequests
         await signup(email, password, role, username);
-        // Give user feedback — signup() already alerts in auth.js, but show a friendly message here too
         btn.textContent = 'Submitted';
-        // Clear sensitive fields
         document.getElementById('signup-password').value = '';
-
-        // Optionally redirect after a short delay
         setTimeout(() => {
           window.location.href = '../index.html';
         }, 1500);
@@ -102,8 +96,6 @@
         btn.textContent = 'Sign Up';
       }
     });
-
-    // Redirect if already logged in
     auth.onAuthStateChanged(user => {
       if (user) {
         window.location.href = '../index.html';
