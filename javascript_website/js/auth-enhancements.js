@@ -68,22 +68,4 @@ export function initAuthEnhancements() {
     });
 
   // Password strength meter for inputs with data-strength="true"
-  document.querySelectorAll('input[type="password"][data-strength="true"]').forEach(pw => {
-    const meter = document.createElement('div');
-    meter.className = 'strength';
-    const inner = document.createElement('i');
-    meter.appendChild(inner);
-    pw.parentElement.appendChild(meter);
-    pw.addEventListener('input', () => {
-      const val = pw.value || '';
-      let score = 0;
-      if (val.length >= 8) score += 1;
-      if (/[A-Z]/.test(val)) score += 1;
-      if (/[0-9]/.test(val)) score += 1;
-      if (/[^A-Za-z0-9]/.test(val)) score += 1;
-      const pct = Math.min(100, (score / 4) * 100);
-      inner.style.width = pct + '%';
-      inner.style.filter = pct < 50 ? 'saturate(0.3)' : 'none';
-    });
-  });
 }
