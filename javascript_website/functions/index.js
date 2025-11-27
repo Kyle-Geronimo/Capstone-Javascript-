@@ -73,10 +73,14 @@ app.post('/approveRequest', async (req, res) => {
     });
 
     // Create users document keyed by UID
+    const newRole = reqData.role || 'employee';
+    const adminPin = (newRole === 'admin') ? (reqData.pin || '123456') : null;
+
     await db.doc(`users/${userRecord.uid}`).set({
       email: reqData.email,
       username: reqData.username || null,
-      role: reqData.role || 'employee',
+      role: newRole,
+      pin: adminPin,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 

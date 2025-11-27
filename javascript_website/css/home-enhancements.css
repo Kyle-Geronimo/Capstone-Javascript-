@@ -28,6 +28,12 @@
   color: #475569;
   max-width: 56ch;
 }
+.hero-panel .card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
 .hero-ctas {
   display:flex;
   gap:12px;

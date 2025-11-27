@@ -53,6 +53,39 @@ app.use((req, res, next) => {
   next();
 });
 
+// --- Device ID cookie middleware ---
+app.use((req, res, next) => {
+  try {
+    const cookieHeader = req.headers.cookie || '';
+    const cookies = {};
+    cookieHeader.split(';').forEach(pair => {
+      const [k, v] = pair.split('=');
+      if (!k || !v) return;
+      const key = k.trim();
+      if (!key) return;
+      cookies[key] = decodeURIComponent(v.trim());
+    });
+
+    let deviceId = cookies.device_id;
+    if (!deviceId) {
+      deviceId = nanoid(24);
+      const isProd = process.env.NODE_ENV === 'production';
+      const cookieParts = [
+        `device_id=${encodeURIComponent(deviceId)}`,
+        'Path=/',
+        'HttpOnly',
+        'SameSite=Lax'
+      ];
+      if (isProd) cookieParts.push('Secure');
+      res.setHeader('Set-Cookie', cookieParts.join('; '));
+    }
+    req.deviceId = deviceId;
+  } catch (e) {
+    console.warn('Device cookie middleware error:', e && e.message);
+  }
+  next();
+});
+
 // Middleware: verify Firebase ID token from Authorization header
 async function verifyToken(req, res, next) {
   try {
@@ -70,6 +103,57 @@ async function verifyToken(req, res, next) {
   }
 }
 
+// Middleware: ensure admin is using their trusted device for QR operations
+async function ensureAdminTrustedDevice(req, res, next) {
+  try {
+    if (!req.user || !req.user.uid) {
+      return res.status(401).json({ error: 'unauthorized', message: 'No authenticated user' });
+    }
+
+    const uid = req.user.uid;
+    const userSnap = await db.collection('users').doc(uid).get();
+    if (!userSnap.exists) {
+      return res.status(403).json({ error: 'forbidden', message: 'User record not found' });
+    }
+
+    const userData = userSnap.data() || {};
+    const role = userData.role || null;
+    if (role !== 'admin') {
+      return res.status(403).json({ error: 'forbidden', message: 'Admin role required for QR dashboard' });
+    }
+
+    const currentDeviceId = req.deviceId;
+    const trustedDeviceId = userData.trustedDeviceId || null;
+
+    // First-time bind: if no trusted device yet, bind this one
+    if (!trustedDeviceId) {
+      try {
+        await db.collection('users').doc(uid).set({
+          trustedDeviceId: currentDeviceId || null,
+          trustedDeviceBoundAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        console.log(`Bound trusted device for admin ${uid} -> ${currentDeviceId}`);
+      } catch (e) {
+        console.warn('Failed to bind trusted device for admin', uid, e && e.message);
+      }
+      return next();
+    }
+
+    // Subsequent requests must match the stored trusted device
+    if (trustedDeviceId && currentDeviceId && trustedDeviceId === currentDeviceId) {
+      return next();
+    }
+
+    return res.status(403).json({
+      error: 'device_not_matched',
+      message: 'This device is not authorized for QR scanning. Please use your originally bound device.'
+    });
+  } catch (err) {
+    console.error('ensureAdminTrustedDevice error:', err);
+    return res.status(500).json({ error: 'internal_error', message: 'Failed to verify device authorization' });
+  }
+}
+
 // Firestore collections and settings
 const USERS_COL = 'users';
 const ATT_COL = 'attendance';
@@ -77,7 +161,7 @@ const CHECK_DUPLICATE_SECONDS = 15;
 
 // POST /api/employee — create or attach QR to a user (protected)
 // This endpoint stores QR data on `users/{uid}` documents instead of a separate employees collection.
-app.post('/api/employee', verifyToken, async (req, res) => {
+app.post('/api/employee', verifyToken, ensureAdminTrustedDevice, async (req, res) => {
   try {
     const { id, name, role, rate, department } = req.body;
     if (!name) return res.status(400).json({ error: 'Name required' });
@@ -149,8 +233,23 @@ app.post('/api/employee', verifyToken, async (req, res) => {
 });
 
 // POST /api/generateQR — generate a data-URI QR and attach to users doc (protected)
+// NOTE: We gate this by admin role (via Firestore) but do not enforce the
+// trusted-device check used for scanner operations. The QR dashboard page
+// itself is additionally protected by an admin PIN.
 app.post('/api/generateQR', verifyToken, async (req, res) => {
   try {
+    // Verify caller is an admin in Firestore users collection
+    try {
+      const callerDoc = await db.collection('users').doc(req.user.uid).get();
+      const callerRole = callerDoc.exists ? callerDoc.data().role : null;
+      if (callerRole !== 'admin') {
+        return res.status(403).json({ error: 'forbidden', message: 'Admin role required to generate QR codes' });
+      }
+    } catch (e) {
+      console.warn('Could not verify caller role for generateQR:', e && e.message);
+      return res.status(500).json({ error: 'role_check_failed', message: 'Could not verify caller role' });
+    }
+
     const { id, name, role, department, shift } = req.body || {};
     if (!name && !id) return res.status(400).json({ error: 'Missing id or name' });
 
@@ -165,15 +264,19 @@ app.post('/api/generateQR', verifyToken, async (req, res) => {
     const payload = { id: targetId, name: name || (uSnap.exists ? uSnap.data().username : null) };
     const qrDataURI = await QRCode.toDataURL(JSON.stringify(payload), { errorCorrectionLevel: 'M', margin: 2, width: 400 });
 
-    await uRef.set({
-      username: name || (uSnap.exists ? uSnap.data().username : null),
-      role: role || (uSnap.exists ? uSnap.data().role : 'employee'),
-      department: department || (uSnap.exists ? uSnap.data().department : null),
-      shift: shift || (uSnap.exists ? uSnap.data().shift : null),
+    // Normalize fields so Firestore never sees undefined values
+    const existingData = uSnap.exists ? (uSnap.data() || {}) : {};
+    const normalized = {
+      username: name || existingData.username || null,
+      role: role || existingData.role || 'employee',
+      department: (department !== undefined ? department : existingData.department) ?? null,
+      shift: (shift !== undefined ? shift : existingData.shift) ?? null,
       qrValue: targetId,
       qrDataURI,
       qrAssignedAt: admin.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
+    };
+
+    await uRef.set(normalized, { merge: true });
 
     return res.json({ id: targetId, qrDataURI, existing: false });
   } catch (err) {
@@ -182,8 +285,8 @@ app.post('/api/generateQR', verifyToken, async (req, res) => {
   }
 });
 
-// POST /api/check — record attendance (protected)
-app.post('/api/check', verifyToken, async (req, res) => {
+// POST /api/check — record attendance (protected, admin trusted device only)
+app.post('/api/check', verifyToken, ensureAdminTrustedDevice, async (req, res) => {
   try {
     const { id, action } = req.body;
     if (!id || !action) return res.status(400).json({ error: 'Missing id or action' });
@@ -239,14 +342,9 @@ app.post('/api/check', verifyToken, async (req, res) => {
         const ref = await db.collection(ATT_COL).add(newDoc);
         return res.json({ ok: true, event: { id: ref.id, action: 'in', date: dateStr } });
       } else {
-        // update existing: set timeIn if missing
+        // Enforce at most one time-in per user per day
         if (attData.timeIn) {
-          // prevent duplicate within cooldown
-          const lastTime = attData.timeIn && attData.timeIn.toDate ? attData.timeIn.toDate().getTime() : 0;
-          const secondsSince = Math.round((Date.now() - lastTime) / 1000);
-          if (secondsSince < CHECK_DUPLICATE_SECONDS) {
-            return res.json({ ok: false, error: `duplicate: last in was ${secondsSince}s ago` });
-          }
+          return res.status(409).json({ ok: false, error: 'duplicate_time_in', message: 'User already has time-in recorded for today.' });
         }
         await attDocRef.update({ timeIn: serverTs });
         return res.json({ ok: true, event: { id: attDocRef.id, action: 'in', date: dateStr } });
@@ -266,13 +364,9 @@ app.post('/api/check', verifyToken, async (req, res) => {
         const ref = await db.collection(ATT_COL).add(newDoc);
         return res.json({ ok: true, event: { id: ref.id, action: 'out', date: dateStr } });
       } else {
-        // update existing: set timeOut
+        // Enforce at most one time-out per user per day
         if (attData.timeOut) {
-          const lastTime = attData.timeOut && attData.timeOut.toDate ? attData.timeOut.toDate().getTime() : 0;
-          const secondsSince = Math.round((Date.now() - lastTime) / 1000);
-          if (secondsSince < CHECK_DUPLICATE_SECONDS) {
-            return res.json({ ok: false, error: `duplicate: last out was ${secondsSince}s ago` });
-          }
+          return res.status(409).json({ ok: false, error: 'duplicate_time_out', message: 'User already has time-out recorded for today.' });
         }
         await attDocRef.update({ timeOut: serverTs });
         return res.json({ ok: true, event: { id: attDocRef.id, action: 'out', date: dateStr } });
@@ -287,7 +381,7 @@ app.post('/api/check', verifyToken, async (req, res) => {
 // GET /api/employees — list employees
 app.get('/api/employees', async (req, res) => {
   try {
-    const snaps = await db.collection(EMP_COL).orderBy('createdAt', 'asc').get();
+    const snaps = await db.collection('employees').orderBy('createdAt', 'asc').get();
     const employees = snaps.docs.map((d) => {
       const data = d.data();
       return {
@@ -361,6 +455,11 @@ app.post('/api/deleteUser', verifyToken, async (req, res) => {
 // Lightweight healthcheck
 app.get('/health', (req, res) => res.json({ ok: true, time: Date.now() }));
 
+// Check if current authenticated admin on this device may use QR dashboard / scanner
+app.get('/api/qr-access', verifyToken, ensureAdminTrustedDevice, (req, res) => {
+  return res.json({ ok: true, deviceId: req.deviceId || null });
+});
+
 // Debug headers (redact Authorization)
 app.all('/debug/headers', (req, res) => {
   const safe = { ...req.headers };
@@ -390,14 +489,13 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Admin server running on http://localhost:${PORT}`);
 });
-
-// POST /api/createUser — create Firebase Auth user and Firestore record (protected)
 // This endpoint intentionally does NOT enforce any "age"/expiration on the
 // account request document: an admin may approve requests regardless of how
 // long they've been pending.
 app.post('/api/createUser', verifyToken, async (req, res) => {
   try {
-    const { email, password, username, role } = req.body;
+    const { email, password, username, role, pin } = req.body;
+
     if (!email || !password) return res.status(400).json({ error: 'email and password required' });
 
     // Require that the caller is an admin in Firestore users collection
@@ -429,10 +527,14 @@ app.post('/api/createUser', verifyToken, async (req, res) => {
     }
 
     // Create Firestore user record
+    const userRole = role || 'employee';
+    const adminPin = (userRole === 'admin') ? (pin || '123456') : null;
+
     await db.collection('users').doc(userRecord.uid).set({
       username: username || '',
       email: String(email).toLowerCase(),
-      role: role || 'employee',
+      role: userRole,
+      pin: adminPin,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       authProvider: 'firebase'
     });

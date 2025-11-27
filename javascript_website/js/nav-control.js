@@ -38,8 +38,13 @@ export async function updateNavVisibility() {
         // Hide login/signup for logged in users
         link.style.display = 'none';
       } else if (link.classList.contains('admin-only')) {
-        // Show admin links only to admins
-        link.style.display = role === 'admin' ? 'inline-block' : 'none';
+        // Admin-only links (Admin, Payroll, etc.)
+        if (role === 'admin') {
+          link.style.display = 'inline-block';
+        } else {
+          // For non-admins, completely remove the button from the DOM
+          link.remove();
+        }
       } else if (link.classList.contains('restricted')) {
         // Show restricted links to all logged in users
         link.style.display = 'inline-block';

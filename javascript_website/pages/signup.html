@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <title>HotelLink - Sign Up</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/png" href="../image/logo/HTLogo.png">
   <link rel="stylesheet" href="../css/styles.css" />
   <link rel="stylesheet" href="../css/auth-modern.css" />
 
@@ -144,7 +145,6 @@
                 </svg>
               </div>
               <input id="signup-password" class="input form-control" type="password" data-strength="true" placeholder="Create a password" required aria-required="true" />
-              <button type="button" class="toggle-password action-btn secondary show-password-btn" data-target="signup-password" aria-pressed="false" aria-label="Show password">Show</button>
             </div>
           </div>
 
@@ -185,6 +185,65 @@
 
     updateNavVisibility && updateNavVisibility();
 
+    // Helper to show a PIN overlay for admin signups
+    function showAdminPinOverlay() {
+      return new Promise((resolve, reject) => {
+        const overlay = document.createElement('div');
+        overlay.id = 'signup-pin-overlay';
+        overlay.style.position = 'fixed';
+        overlay.style.inset = '0';
+        overlay.style.zIndex = '9999';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.background = 'rgba(15,23,42,0.45)';
+        overlay.style.backdropFilter = 'blur(6px)';
+
+        overlay.innerHTML = `
+          <div style="background:#fff;border-radius:16px;padding:24px 28px;max-width:360px;width:100%;box-shadow:0 18px 45px rgba(15,23,42,0.35);text-align:center;">
+            <h2 style="margin:0 0 8px;font-size:1.2rem;color:#111827;">Set Admin PIN</h2>
+            <p style="margin:0 0 16px;font-size:0.9rem;color:#4b5563;">Create a 6-digit PIN. This will be used later to unlock the QR Dashboard.</p>
+            <input id="signup-pin-input" type="password" maxlength="6" inputmode="numeric" autocomplete="off"
+                   style="font-size:1.4rem;letter-spacing:0.4em;text-align:center;padding:8px 12px;border-radius:999px;border:1px solid #d1d5db;width:100%;box-sizing:border-box;" />
+            <div id="signup-pin-error" style="min-height:18px;margin-top:8px;font-size:0.8rem;color:#b91c1c;"></div>
+            <div style="display:flex;gap:8px;justify-content:center;margin-top:16px;">
+              <button id="signup-pin-cancel" type="button" class="action-btn" style="background:#e5e7eb;color:#374151;">Cancel</button>
+              <button id="signup-pin-submit" type="button" class="action-btn primary">Continue</button>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(overlay);
+        const input = document.getElementById('signup-pin-input');
+        const errEl = document.getElementById('signup-pin-error');
+        const btnSubmit = document.getElementById('signup-pin-submit');
+        const btnCancel = document.getElementById('signup-pin-cancel');
+
+        function cleanup(val) {
+          overlay.remove();
+          if (val === null) reject(new Error('PIN cancelled')); else resolve(val);
+        }
+
+        btnCancel.addEventListener('click', () => cleanup(null));
+
+        function trySubmit() {
+          const val = String(input.value || '').trim();
+          if (!/^\d{6}$/.test(val)) {
+            errEl.textContent = 'PIN must be exactly 6 digits.';
+            return;
+          }
+          cleanup(val);
+        }
+
+        btnSubmit.addEventListener('click', trySubmit);
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); trySubmit(); }
+        });
+
+        setTimeout(() => { input.focus(); }, 50);
+      });
+    }
+
     document.getElementById('signup-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const announcer = document.getElementById('auth-announcer');
@@ -205,8 +264,21 @@
       btn.textContent = 'Submitting...';
 
       try {
-        // Keep existing signup signature (email, password, role, username)
-        await signup(email, password, role, username);
+        let pin = null;
+        if (role === 'admin') {
+          try {
+            pin = await showAdminPinOverlay();
+          } catch (_) {
+            // User cancelled PIN dialog
+            btn.disabled = false;
+            btn.textContent = 'Sign Up';
+            return;
+          }
+        }
+
+        // Pass optional PIN into signup so it can be stored with the account request
+        await signup(email, password, role, username, pin);
+
         btn.textContent = 'Submitted';
         document.getElementById('signup-password').value = '';
         announcer.textContent = 'Signup successful. Redirecting...';

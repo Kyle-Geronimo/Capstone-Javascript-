@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Generate QR — HRIS</title>
+  <link rel="icon" type="image/png" href="../image/logo/HTLogo.png">
   <link rel="stylesheet" href="../css/styles.css">
 
   <!-- Firebase SDKs -->
@@ -89,7 +90,7 @@
                 <button id="startCamera">Start</button>
                 <button id="stopCamera">Stop</button>
                 <button id="retryCameras">Retry Cameras</button>
-                <input id="uploadQrImage" type="file" accept="image/*" />
+                <input id="uploadQrImage" type="file" accept="image/png,image/jpeg" />
               </div>
             </div>
 
@@ -111,12 +112,14 @@
 
   <footer>
     <div class="container">
-      <p>&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>
+      <p style="text-align: center;">&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>
     </div>
   </footer>
   
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" type="text/javascript"></script>
   <script src="../vendor/html5-qrcode.min.js"></script>
+  <!-- Fallback QR decoder for image uploads -->
+  <script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"></script>
   <script>
     (function(){
       if (typeof Html5Qrcode === 'undefined') {
@@ -130,9 +133,10 @@
   </script>
 
 <script type="module">
-  import { auth } from '../js/firebase-config.js';
+  import { auth, db } from '../js/firebase-config.js';
   import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
   import { initializeGenerator, initializeScanner } from '../js/qr.js';
+  import { getDoc, doc } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
 
 
   updateNavVisibility();
@@ -151,21 +155,113 @@
     });
   }
 
-  (async () => {
+  // Simple helper to create a full-screen PIN overlay with blurred background.
+  function showPinOverlay(correctPin) {
+    return new Promise((resolve, reject) => {
+      const overlay = document.createElement('div');
+      overlay.id = 'qr-pin-overlay';
+      overlay.style.position = 'fixed';
+      overlay.style.inset = '0';
+      overlay.style.zIndex = '9999';
+      overlay.style.display = 'flex';
+      overlay.style.alignItems = 'center';
+      overlay.style.justifyContent = 'center';
+      overlay.style.background = 'rgba(15,23,42,0.45)';
+      overlay.style.backdropFilter = 'blur(6px)';
+
+      overlay.innerHTML = `
+        <div style="background:#fff;border-radius:16px;padding:24px 28px;max-width:360px;width:100%;box-shadow:0 18px 45px rgba(15,23,42,0.35);text-align:center;">
+          <h2 style="margin:0 0 8px;font-size:1.2rem;color:#111827;">Admin PIN Required</h2>
+          <p style="margin:0 0 16px;font-size:0.9rem;color:#4b5563;">Please enter your 6-digit PIN to access the QR Dashboard.</p>
+          <input id="qr-pin-input" type="password" maxlength="6" inputmode="numeric" autocomplete="off"
+                 style="font-size:1.4rem;letter-spacing:0.4em;text-align:center;padding:8px 12px;border-radius:999px;border:1px solid #d1d5db;width:100%;box-sizing:border-box;" />
+          <div id="qr-pin-error" style="min-height:18px;margin-top:8px;font-size:0.8rem;color:#b91c1c;"></div>
+          <div style="display:flex;gap:8px;justify-content:center;margin-top:16px;">
+            <button id="qr-pin-cancel" type="button" class="action-btn" style="background:#e5e7eb;color:#374151;">Cancel</button>
+            <button id="qr-pin-submit" type="button" class="action-btn primary">Unlock</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+      const input = document.getElementById('qr-pin-input');
+      const errEl = document.getElementById('qr-pin-error');
+      const btnSubmit = document.getElementById('qr-pin-submit');
+      const btnCancel = document.getElementById('qr-pin-cancel');
+
+      function cleanup(ok) {
+        overlay.remove();
+        (ok ? resolve() : reject(new Error('PIN cancelled or invalid')));
+      }
+
+      btnCancel.addEventListener('click', () => {
+        cleanup(false);
+      });
+
+      function trySubmit() {
+        const val = String(input.value || '').trim();
+        if (!/^\d{6}$/.test(val)) {
+          errEl.textContent = 'PIN must be exactly 6 digits.';
+          return;
+        }
+        if (val !== String(correctPin)) {
+          errEl.textContent = 'Incorrect PIN.';
+          return;
+        }
+        cleanup(true);
+      }
+
+      btnSubmit.addEventListener('click', trySubmit);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); trySubmit(); }
+      });
+
+      setTimeout(() => { input.focus(); }, 50);
+    });
+  }
+
+  // Wait for Firebase auth and then gate access by role + PIN using the overlay.
+  auth.onAuthStateChanged(async (user) => {
+    if (!user) {
+      window.location.href = 'login.html';
+      return;
+    }
+
     try {
-      initializeGenerator(); 
+      const snap = await getDoc(doc(db, 'users', user.uid));
+      const data = snap.exists() ? snap.data() : {};
+      const role = data.role || 'employee';
+
+      if (role !== 'admin') {
+        alert('Only admins can access the QR Dashboard.');
+        window.location.href = 'payroll.html';
+        return;
+      }
+
+      const storedPin = (data.pin ? String(data.pin) : '123456');
+
+      // Show overlay immediately; only on success do we initialize the dashboard.
+      try {
+        await showPinOverlay(storedPin);
+      } catch (_) {
+        window.location.href = 'payroll.html';
+        return;
+      }
+
+      // PIN OK — proceed to initialize QR generator & scanner
+      initializeGenerator();
       await waitForHtml5Qrcode(7000);
       console.log('Html5Qrcode available — initializing scanner.');
       initializeScanner();
     } catch (err) {
-      console.error('Failed to initialize scanner (Html5Qrcode missing):', err);
+      console.error('Failed to initialize scanner (Html5Qrcode or PIN check issue):', err);
       const statusEl = document.getElementById('status-scanner') || document.getElementById('status');
       if (statusEl) {
-        statusEl.textContent = 'Status: Html5Qrcode failed to load — check ../vendor/html5-qrcode.min.js and console.';
+        statusEl.textContent = 'Status: Unable to initialize QR dashboard. See console for details.';
         statusEl.className = 'utility-status error';
       }
     }
-  })();
+  });
 </script>
 </body>
 </html>

@@ -222,7 +222,8 @@ function openEditModal(currentData, onSave) {
     return;
   }
 
-  // Show root and modal
+  // Show root and modal (remove utility hidden class so CSS no longer forces display:none)
+  root.classList.remove('hidden');
   root.style.display = 'block';
   const modal = root.querySelector('.profile-edit-modal');
   modal.removeAttribute('hidden');
@@ -268,6 +269,7 @@ function openEditModal(currentData, onSave) {
     cancelBtn.addEventListener('click', () => {
       modal.setAttribute('hidden', '');
       root.style.display = 'none';
+      root.classList.add('hidden');
     });
   }
 
@@ -288,6 +290,7 @@ function openEditModal(currentData, onSave) {
       await onSave(newName, newPhotoURL);
       modal.setAttribute('hidden', '');
       root.style.display = 'none';
+      root.classList.add('hidden');
     } catch (err) {
       console.error('Save error:', err);
       alert('Error saving profile: ' + err.message);
@@ -300,6 +303,7 @@ function openEditModal(currentData, onSave) {
     backdrop.onclick = () => {
       modal.setAttribute('hidden', '');
       root.style.display = 'none';
+      root.classList.add('hidden');
     };
   }
 }

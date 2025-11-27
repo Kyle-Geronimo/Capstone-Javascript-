@@ -15,6 +15,8 @@ const exportCsvBtn = document.getElementById('exportCsvBtn');
 const payrollBody = document.getElementById('payrollBody');
 const rowsCountEl = document.getElementById('rowsCount');
 const statusEl = document.getElementById('status');
+const payrollLoadingOverlay = document.getElementById('payrollLoadingOverlay');
+const payrollLoadingTextEl = document.getElementById('payrollLoadingText');
 
 let usersList = [];
 let rows = [];
@@ -425,6 +427,18 @@ function setStatus(msg, isError = false) {
   }
 }
 
+// Lightweight helpers to control the full-page payroll loading overlay
+function showPayrollLoading(message) {
+  if (!payrollLoadingOverlay) return;
+  if (payrollLoadingTextEl && message) payrollLoadingTextEl.textContent = message;
+  payrollLoadingOverlay.classList.remove('hidden');
+}
+
+function hidePayrollLoading() {
+  if (!payrollLoadingOverlay) return;
+  payrollLoadingOverlay.classList.add('hidden');
+}
+
 // Auto-initialize payroll on page load or when auth is ready
 (async function autoInitPayroll() {
   try {
@@ -547,8 +561,25 @@ async function initLivePayroll() {
     console.log('Payroll table not found on this page. Skipping logic.');
     return;
   }
-  // 1) Fetch latest payroll run (rates + meta + lines) once
-  const { ratesMap: latestRates, runMeta: latestRunMeta, linesMap: latestLines } = await fetchMostRecentPayrollRun();
+  // 1) Fetch latest payroll run (rates + meta + lines) once.
+  //    If this fails (e.g. no payrolls yet or indexing/permission issues),
+  //    fall back to an empty payload so we still load users and render rows.
+  let latestRates = new Map();
+  let latestRunMeta = null;
+  let latestLines = new Map();
+  try {
+    const payload = await fetchMostRecentPayrollRun();
+    if (payload) {
+      latestRates = payload.ratesMap instanceof Map ? payload.ratesMap : (payload.ratesMap || new Map());
+      latestRunMeta = payload.runMeta || null;
+      latestLines = payload.linesMap instanceof Map ? payload.linesMap : (payload.linesMap || new Map());
+    }
+  } catch (err) {
+    console.warn('fetchMostRecentPayrollRun failed; continuing with base user rates only', err);
+    latestRates = new Map();
+    latestRunMeta = null;
+    latestLines = new Map();
+  }
 
   // 1b) Load SSS contribution table into memory (if present)
   try {
@@ -607,30 +638,45 @@ async function initLivePayroll() {
     // latestRates and latestLines were fetched above via fetchMostRecentPayrollRun()
     console.log('DEBUG: latest payroll rates loaded:', Array.from((latestRates && latestRates.entries && typeof latestRates.entries === 'function') ? latestRates.entries() : []));
 
-    // build rows using latestRates
+    // build rows using latestRates and, when available, values from the latest saved payroll run
     rows = usersList.map(u => {
       const uid = u.userId || u.id;
-      const ratePerDay = (latestRates && latestRates.has(uid)) ? Number(latestRates.get(uid)) : Number(u.ratePerDay || u.baseRatePerDay || 0);
       const savedLine = (typeof latestLines !== 'undefined' && latestLines && latestLines.has(uid)) ? latestLines.get(uid) : null;
       const seededNote = savedLine && savedLine.note ? savedLine.note : (u.note || '');
+
+      // Priority for ratePerDay:
+      // 1) ratePerDay saved on the latest payroll line (what you edited last run)
+      // 2) latestRates map (e.g. from an older run)
+      // 3) base rate stored on the user document
+      const userBaseRate = Number(u.ratePerDay || u.baseRatePerDay || 0);
+      const savedRate = savedLine && savedLine.ratePerDay !== undefined && savedLine.ratePerDay !== null
+        ? Number(savedLine.ratePerDay)
+        : null;
+      const rateFromLatest = (latestRates && latestRates.has(uid)) ? Number(latestRates.get(uid)) : null;
+      const ratePerDay = savedRate !== null ? savedRate : (rateFromLatest !== null ? rateFromLatest : userBaseRate);
+
       return {
         userId: uid,
         username: u.username || u.displayName || u.email || '',
         role: u.role || '',
         shift: u.shift || '',
         ratePerDay,
-        daysWorked: 0,
-        hoursWorked: 0,
-        ndHours: 0,
+
+        // Use saved values from latest payroll run when available so edits persist
+        daysWorked: savedLine && typeof savedLine.daysWorked === 'number' ? Number(savedLine.daysWorked) : 0,
+        hoursWorked: savedLine && typeof savedLine.hoursWorked === 'number' ? Number(savedLine.hoursWorked) : 0,
+        ndHours: savedLine && typeof savedLine.ngHours === 'number' ? Number(savedLine.ngHours) : 0,
         ndOtHours: 0,
-        otHours: 0,
-        regularHolidayHours: 0,
-        specialHolidayHours: 0,
-        // UI fields / overrides (empty initially)
-        sss: null,
-        philhealth: null,
-        pagibig: null,
-        stPeter: null,
+        otHours: savedLine && typeof savedLine.otHours === 'number' ? Number(savedLine.otHours) : 0,
+        regularHolidayHours: savedLine && typeof savedLine.regularHolidayHours === 'number' ? Number(savedLine.regularHolidayHours) : 0,
+        specialHolidayHours: savedLine && typeof savedLine.specialHolidayHours === 'number' ? Number(savedLine.specialHolidayHours) : 0,
+
+        // UI fields / overrides (seed from saved line when present)
+        sss: (savedLine && typeof savedLine.sss === 'number') ? Number(savedLine.sss) : null,
+        philhealth: (savedLine && typeof savedLine.philhealth === 'number') ? Number(savedLine.philhealth) : null,
+        pagibig: (savedLine && typeof savedLine['pag-ibig'] === 'number') ? Number(savedLine['pag-ibig']) : null,
+        stPeter: (savedLine && typeof savedLine['st.peter'] === 'number') ? Number(savedLine['st.peter']) : null,
+
         sssSalaryLoan: Number((savedLine && savedLine['sss salary loan']) || 0),
         // NEW: SSS Calamity Loan
         sssCalamityLoan: Number((savedLine && savedLine['sss calamity loan']) || 0),
@@ -640,6 +686,8 @@ async function initLivePayroll() {
         utLateHours: Number((savedLine && savedLine['ut/late']) || 0),
         utLateAmount: Number((savedLine && savedLine['ut/late amount']) || 0),
         note: seededNote,
+
+        // Manual override fields (not persisted yet; reset when reopening page)
         _manualGross: null,
         _manualDeductions: null,
         _manualNet: null,
@@ -1045,8 +1093,19 @@ async function loadHolidaysFromFirestore() {
       return;
     }
     const data = snap.data() || {};
-    regHolidays = new Set((data.regular || []).map(d => (new Date(d)).toISOString().slice(0,10)));
-    specHolidays = new Set((data.special || []).map(d => (new Date(d)).toISOString().slice(0,10)));
+
+    // Support both legacy shape (regularHolidays/specialHolidays with objects)
+    // and newer simple arrays (regular/special with date strings).
+    const legacyRegular = Array.isArray(data.regularHolidays) ? data.regularHolidays.map(h => h.date || h) : [];
+    const legacySpecial = Array.isArray(data.specialHolidays) ? data.specialHolidays.map(h => h.date || h) : [];
+    const simpleRegular = Array.isArray(data.regular) ? data.regular : [];
+    const simpleSpecial = Array.isArray(data.special) ? data.special : [];
+
+    const mergedRegular = [...legacyRegular, ...simpleRegular];
+    const mergedSpecial = [...legacySpecial, ...simpleSpecial];
+
+    regHolidays = new Set(mergedRegular.map(d => (new Date(d)).toISOString().slice(0,10)));
+    specHolidays = new Set(mergedSpecial.map(d => (new Date(d)).toISOString().slice(0,10)));
   } catch (err) {
     console.error('Failed to load holidays', err);
   }
@@ -1299,42 +1358,43 @@ function renderTable() {
 
       <td><input class="input-small" data-field="ratePerDay" data-id="${r.userId}" value="${escapeHtml(val('ratePerDay'))}" placeholder="${escapeHtml(fmt(r.ratePerDay || r._calc?.ratePerDay || ''))}" /></td>
 
-      <td><input class="input-small" data-field="daysWorked" data-id="${r.userId}" value="${escapeHtml(val('daysWorked'))}" placeholder="${escapeHtml(fmt(r.daysWorked || ''))}" /></td>
+      <!-- Days: computed from attendance (8h=1 day for morning/mid, 9h=1 day for night), read-only -->
+      <td><input class="input-small" data-field="daysWorked" data-id="${r.userId}" value="${escapeHtml(fmt(r.daysWorked || auto.daysWorked || ''))}" placeholder="${escapeHtml(fmt(r.daysWorked || auto.daysWorked || ''))}" readonly /></td>
 
-      <td><input class="input-small" data-field="hoursWorked" data-id="${r.userId}" value="${escapeHtml(val('hoursWorked'))}" placeholder="${escapeHtml(fmt(r._calc?.hoursWorked ?? r.hoursWorked ?? ''))}" /></td>
+      <td><input class="input-small" data-field="hoursWorked" data-id="${r.userId}" value="${escapeHtml(fmt(r.hoursWorked || auto.hoursWorked || ''))}" placeholder="${escapeHtml(fmt(r.hoursWorked || auto.hoursWorked || ''))}" readonly /></td>
 
-      <td><input class="input-small" data-field="ndHours" data-id="${r.userId}" value="${escapeHtml(val('ndHours'))}" placeholder="${escapeHtml(fmt(r._calc?.ndHours ?? r.ndHours ?? ''))}" /></td>
+      <td><input class="input-small" data-field="ndHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.ndHours || auto.ndHours || ''))}" placeholder="${escapeHtml(fmt(r.ndHours || auto.ndHours || ''))}" readonly /></td>
 
-      <td><input class="input-small" data-field="ndOtHours" data-id="${r.userId}" value="${escapeHtml(val('ndOtHours'))}" placeholder="${escapeHtml(fmt(r._calc?.ndOtHours ?? r.ndOtHours ?? ''))}" /></td>
+      <td><input class="input-small" data-field="ndOtHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.ndOtHours || auto.ndOtHours || ''))}" placeholder="${escapeHtml(fmt(r.ndOtHours || auto.ndOtHours || ''))}" readonly /></td>
 
-      <td><input class="input-small" data-field="otHours" data-id="${r.userId}" value="${escapeHtml(val('otHours'))}" placeholder="${escapeHtml(fmt(r._calc?.otHours ?? r.otHours ?? ''))}" /></td>
+      <td><input class="input-small" data-field="otHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.otHours || auto.otHours || ''))}" placeholder="${escapeHtml(fmt(r.otHours || auto.otHours || ''))}" readonly /></td>
 
-      <td><input class="input-small" data-field="regularHolidayHours" data-id="${r.userId}" value="${escapeHtml(val('regularHolidayHours'))}" placeholder="${escapeHtml(fmt(r._calc?.regHolidayHours ?? r.regularHolidayHours ?? ''))}" /></td>
+      <td><input class="input-small" data-field="regularHolidayHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.regularHolidayHours || auto.regHolidayHours || ''))}" placeholder="${escapeHtml(fmt(r.regularHolidayHours || auto.regHolidayHours || ''))}" readonly /></td>
 
-      <td><input class="input-small" data-field="specialHolidayHours" data-id="${r.userId}" value="${escapeHtml(val('specialHolidayHours'))}" placeholder="${escapeHtml(fmt(r._calc?.specialHolidayHours ?? r.specialHolidayHours ?? ''))}" /></td>
+      <td><input class="input-small" data-field="specialHolidayHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.specialHolidayHours || auto.specialHolidayHours || ''))}" placeholder="${escapeHtml(fmt(r.specialHolidayHours || auto.specialHolidayHours || ''))}" readonly /></td>
 
-      <!-- statutory deductions (editable) -->
-      <td><input class="input-small" data-field="sss" data-id="${r.userId}" value="${escapeHtml(val('sss'))}" placeholder="${escapeHtml(fmt(ph_sss))}" /></td>
-      <td><input class="input-small" data-field="philhealth" data-id="${r.userId}" value="${escapeHtml(val('philhealth'))}" placeholder="${escapeHtml(fmt(ph_phil))}" /></td>
-      <td><input class="input-small" data-field="pagibig" data-id="${r.userId}" value="${escapeHtml(val('pagibig'))}" placeholder="${escapeHtml(fmt(ph_pagibig))}" /></td>
+      <!-- statutory deductions: automated, read-only -->
+      <td><input class="input-small" data-field="sss" data-id="${r.userId}" value="${escapeHtml(fmt(r.sss ?? ph_sss))}" placeholder="${escapeHtml(fmt(ph_sss))}" readonly /></td>
+      <td><input class="input-small" data-field="philhealth" data-id="${r.userId}" value="${escapeHtml(fmt(r.philhealth ?? ph_phil))}" placeholder="${escapeHtml(fmt(ph_phil))}" readonly /></td>
+      <td><input class="input-small" data-field="pagibig" data-id="${r.userId}" value="${escapeHtml(fmt(r.pagibig ?? ph_pagibig))}" placeholder="${escapeHtml(fmt(ph_pagibig))}" readonly /></td>
+      <!-- ST. Peter: manual deduction -->
       <td><input class="input-small" data-field="stPeter" data-id="${r.userId}" value="${escapeHtml(val('stPeter'))}" placeholder="${escapeHtml(fmt(ph_stp))}" /></td>
 
-      <!-- loans -->
+      <!-- loans (manual deductions) -->
       <td><input class="input-small" data-field="sssSalaryLoan" data-id="${r.userId}" value="${escapeHtml(val('sssSalaryLoan'))}" placeholder="${escapeHtml(fmt(r.sssSalaryLoan || '0'))}" /></td>
       <td><input class="input-small" data-field="sssCalamityLoan" data-id="${r.userId}" value="${escapeHtml(val('sssCalamityLoan'))}" placeholder="${escapeHtml(fmt(r.sssCalamityLoan || '0'))}" /></td>
       <td><input class="input-small" data-field="hdmfSalaryLoan" data-id="${r.userId}" value="${escapeHtml(val('hdmfSalaryLoan'))}" placeholder="${escapeHtml(fmt(r.hdmfSalaryLoan || '0'))}" /></td>
       <td><input class="input-small" data-field="hdmfCalamityLoan" data-id="${r.userId}" value="${escapeHtml(val('hdmfCalamityLoan'))}" placeholder="${escapeHtml(fmt(r.hdmfCalamityLoan || '0'))}" /></td>
       <td><input class="input-small" data-field="cashAdvance" data-id="${r.userId}" value="${escapeHtml(val('cashAdvance'))}" placeholder="${escapeHtml(fmt(r.cashAdvance || '0'))}" /></td>
 
-      <!-- UT / Late -->
-      <td><input class="input-small" data-field="utLateHours" data-id="${r.userId}" value="${escapeHtml(val('utLateHours'))}" placeholder="${escapeHtml(fmt(r.utLateHours || '0'))}" /></td>
-      <td><input class="input-small" data-field="utLateAmount" data-id="${r.userId}" value="${escapeHtml(val('utLateAmount'))}" placeholder="${escapeHtml(fmt(r.utLateAmount || '0'))}" /></td>
+      <!-- UT / Late: automated from attendance -->
+      <td><input class="input-small" data-field="utLateHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.utLateHours || auto.utLateHours || ''))}" placeholder="${escapeHtml(fmt(r.utLateHours || auto.utLateHours || ''))}" readonly /></td>
+      <td><input class="input-small" data-field="utLateAmount" data-id="${r.userId}" value="${escapeHtml(fmt(r.utLateAmount || auto.utLateAmount || ''))}" placeholder="${escapeHtml(fmt(r.utLateAmount || auto.utLateAmount || ''))}" readonly /></td>
 
-      
-
-      <td><input class="input-small" data-field="grossPay" data-id="${r.userId}" value="${escapeHtml(val('_manualGross'))}" placeholder="${escapeHtml(ph_gross)}" /></td>
-      <td><input class="input-small" data-field="deductionsTotal" data-id="${r.userId}" value="${escapeHtml(val('_manualDeductions'))}" placeholder="${escapeHtml(ph_deductions_total)}" /></td>
-      <td><input class="input-small" data-field="netPay" data-id="${r.userId}" value="${escapeHtml(val('_manualNet'))}" placeholder="${escapeHtml(ph_net)}" /></td>
+      <!-- Gross / Deductions / Net: fully automated, read-only -->
+      <td><input class="input-small" data-field="grossPay" data-id="${r.userId}" value="${escapeHtml(ph_gross)}" placeholder="${escapeHtml(ph_gross)}" readonly /></td>
+      <td><input class="input-small" data-field="deductionsTotal" data-id="${r.userId}" value="${escapeHtml(ph_deductions_total)}" placeholder="${escapeHtml(ph_deductions_total)}" readonly /></td>
+      <td><input class="input-small" data-field="netPay" data-id="${r.userId}" value="${escapeHtml(ph_net)}" placeholder="${escapeHtml(ph_net)}" readonly /></td>
 
       <td><input data-field="note" data-id="${r.userId}" value="${escapeHtml(val('note'))}" placeholder="${escapeHtml(r.note || '')}" /></td>
     `;
@@ -1351,9 +1411,8 @@ function renderTable() {
       if (!row) return;
       // numeric fields list
       const numericFields = [
-        'ratePerDay','daysWorked','hoursWorked','ndHours','ndOtHours','otHours','regularHolidayHours','specialHolidayHours',
-        'sss','philhealth','pagibig','stPeter','sssSalaryLoan','sssCalamityLoan','hdmfSalaryLoan','hdmfCalamityLoan','cashAdvance','utLateHours','utLateAmount',
-        '_manualGross','_manualDeductions','_manualNet'
+        // Only these fields are manually editable numeric inputs; all others are automated/read-only
+        'ratePerDay','stPeter','sssSalaryLoan','sssCalamityLoan','hdmfSalaryLoan','hdmfCalamityLoan','cashAdvance'
       ];
 
       // store using camelCase UI names; when saving we map to Firestore literal keys
@@ -1361,14 +1420,19 @@ function renderTable() {
         const parsed = inp.value === '' ? null : Number(inp.value);
         row[field] = parsed;
 
-        // Special behavior: when user edits a pagibig value, propagate to all rows (auto-fill)
-        if (field === 'pagibig') {
-          rows.forEach(r => { r.pagibig = parsed; });
-          // re-render table so all inputs reflect the new pagibig value
-          renderTable();
-          setStatus('Pag-IBIG value applied to all rows.');
-          return;
+        // Persist ratePerDay edits directly onto the user document so they
+        // remain permanent across payroll runs and page refreshes.
+        if (field === 'ratePerDay' && parsed !== null && !Number.isNaN(parsed)) {
+          try {
+            const uref = doc(db, 'users', id);
+            // fire-and-forget; no need to await here
+            updateDoc(uref, { ratePerDay: parsed }).catch(e => console.warn('Failed to update user ratePerDay', e));
+          } catch (e) {
+            console.warn('Error scheduling ratePerDay update', e);
+          }
         }
+
+        // no special propagation behavior; all other deductions are automated
       } else {
         row[field] = inp.value;
       }
@@ -1402,6 +1466,7 @@ function isWithinShiftWindow(t, shift) {
 // Load users — same approach as before (reads users collection)
 async function loadUsersAndAttendance() {
   try {
+    showPayrollLoading('Loading users and payroll table…');
     setStatus('Loading users...');
     // attempt to seed ratePerDay and notes from the most recent saved payroll run
     const { ratesMap: latestRates, runMeta: latestRunMeta, linesMap: latestLines } = await fetchMostRecentPayrollRun().catch(err => {
@@ -1464,32 +1529,88 @@ async function loadUsersAndAttendance() {
   } catch (err) {
     console.error('loadUsersAndAttendance error', err);
     setStatus('Failed to load users: ' + (err.message || err), true);
+  } finally {
+    hidePayrollLoading();
   }
 }
 
-/* loadAttendanceForRows & compute hours:
-   This preserves the existing precise-segmentation ND/OT logic from your payroll.js.
-   The file in your repo already contains detailed functions that compute ndHours, ndOtHours, otHours from attendance segments. I preserved that behavior and call it here.
-   (See the version in your repo for the detailed algorithm). :contentReference[oaicite:3]{index=3}
-*/
+   /* 
+    NOTE:
+    This implementation preserves the precise ND/OT segmentation behavior from the
+    earlier version of your payroll logic by computing ndHours, ndOtHours, and
+    otHours from attendance records and then aggregating them per user.
+   */
 async function loadAttendanceForRows(startDateStr, endDateStr) {
   if (!startDateStr || !endDateStr) return;
+  showPayrollLoading('Loading attendance and recalculating…');
   setStatus('Loading attendance for period...');
   const startDate = new Date(startDateStr);
   startDate.setHours(0,0,0,0);
   const endDate = new Date(endDateStr);
   endDate.setHours(23,59,59,999);
 
+  // helper: compute scheduled shift start Date for a given clock-in
+  function getShiftStartForClockIn(shiftName, clockInDate) {
+    const ci = new Date(clockInDate);
+    const y = ci.getFullYear();
+    const m = ci.getMonth();
+    const d = ci.getDate();
+    const h = ci.getHours();
+
+    // default morning: 06:00 same calendar day
+    if (shiftName === 'morning') {
+      return new Date(y, m, d, 6, 0, 0, 0);
+    }
+
+    // mid shift: 14:00 same calendar day
+    if (shiftName === 'mid') {
+      return new Date(y, m, d, 14, 0, 0, 0);
+    }
+
+    // night shift: typically 22:00–05:59.
+    // If clock-in is after midnight but before 06:00, treat shift start as 22:00 previous calendar day.
+    if (shiftName === 'night') {
+      if (h < 6) {
+        const prev = new Date(y, m, d);
+        prev.setDate(prev.getDate() - 1);
+        return new Date(prev.getFullYear(), prev.getMonth(), prev.getDate(), 22, 0, 0, 0);
+      }
+      return new Date(y, m, d, 22, 0, 0, 0);
+    }
+
+    // unknown shift: no scheduled start
+    return null;
+  }
+
   for (const r of rows) {
     try {
-      const attQ = query(
-        collection(db, 'attendance'),
+      // First, try QR-scanner style events that use rawTime + mode (time-in/time-out)
+      const attCol = collection(db, 'attendance');
+      const startIso = startDate.toISOString();
+      const endIso = endDate.toISOString();
+
+      const qrStyleQ = query(
+        attCol,
         where('userId', '==', r.userId),
-        where('clockIn', '>=', Timestamp.fromDate(startDate)),
-        where('clockIn', '<=', Timestamp.fromDate(endDate)),
-        orderBy('clockIn')
+        where('rawTime', '>=', startIso),
+        where('rawTime', '<=', endIso),
+        orderBy('rawTime')
       );
-      const snap = await getDocs(attQ);
+      let snap = await getDocs(qrStyleQ);
+
+      // If no QR-style events found, fall back to legacy clockIn/clockOut documents
+      let usingLegacy = false;
+      if (!snap || snap.empty) {
+        const legacyQ = query(
+          attCol,
+          where('userId', '==', r.userId),
+          where('clockIn', '>=', Timestamp.fromDate(startDate)),
+          where('clockIn', '<=', Timestamp.fromDate(endDate)),
+          orderBy('clockIn')
+        );
+        snap = await getDocs(legacyQ);
+        usingLegacy = true;
+      }
       const hadAttendance = snap && !snap.empty;
 
       // If there is no attendance for this user in the selected period, preserve any
@@ -1513,46 +1634,140 @@ async function loadAttendanceForRows(startDateStr, endDateStr) {
 
       // aggregate per day (simple approach)
       const perDay = {};
-      for (const d of snap.docs) {
-        const data = d.data();
-        const ci = data.clockIn instanceof Timestamp ? data.clockIn.toDate() : new Date(data.clockIn);
-        const co = data.clockOut ? (data.clockOut instanceof Timestamp ? data.clockOut.toDate() : new Date(data.clockOut)) : null;
-        if (!ci || !co || co <= ci) continue;
+      const perDayLateMinutes = {};
 
-        const ms = co - ci;
-        const hours = ms / (1000 * 60 * 60);
+      if (usingLegacy) {
+        // Legacy documents with explicit clockIn/clockOut
+        for (const d of snap.docs) {
+          const data = d.data();
+          const ci = data.clockIn instanceof Timestamp ? data.clockIn.toDate() : new Date(data.clockIn);
+          const co = data.clockOut ? (data.clockOut instanceof Timestamp ? data.clockOut.toDate() : new Date(data.clockOut)) : null;
+          if (!ci || !co || co <= ci) continue;
 
-        const dKey = `${ci.getFullYear()}-${String(ci.getMonth()+1).padStart(2,'0')}-${String(ci.getDate()).padStart(2,'0')}`;
-        perDay[dKey] = (perDay[dKey] || 0) + hours;
+          const ms = co - ci;
+          const hours = ms / (1000 * 60 * 60);
 
-        // ND detection in segments (rough approximation using 15-min slices)
-        let t = new Date(ci);
-        const last = new Date(co);
-        const stepMs = 15 * 60 * 1000;
-        while (t < last) {
-          const tNext = new Date(Math.min(t.getTime() + stepMs, last.getTime()));
-          const segHours = (tNext - t) / (1000 * 60 * 60);
-          // shift-aware checks
-          const segIsND = isNightDiffTime(t);
-          const segInShift = isWithinShiftWindow(t, r.shift || '');
-          // accumulate night-diff hours (same behavior as before)
-          if (segIsND) r.ndHours = (r.ndHours || 0) + segHours;
-          // segInShift available for future shift-specific logic (UT/late, scheduled hours, etc.)
-          t = tNext;
+          const dKey = `${ci.getFullYear()}-${String(ci.getMonth()+1).padStart(2,'0')}-${String(ci.getDate()).padStart(2,'0')}`;
+          perDay[dKey] = (perDay[dKey] || 0) + hours;
+
+          // Late detection per scan based on scheduled shift start and 30-minute grace window
+          if (r.shift) {
+            const shiftStart = getShiftStartForClockIn(r.shift, ci);
+            if (shiftStart && ci > shiftStart) {
+              const diffMs = ci.getTime() - shiftStart.getTime();
+              const diffMin = Math.floor(diffMs / 60000);
+              const graceMin = 30;
+              if (diffMin > graceMin) {
+                const lateMin = diffMin - graceMin;
+                perDayLateMinutes[dKey] = (perDayLateMinutes[dKey] || 0) + lateMin;
+              }
+            }
+          }
+
+          // ND detection in segments (rough approximation using 15-min slices)
+          let t = new Date(ci);
+          const last = new Date(co);
+          const stepMs = 15 * 60 * 1000;
+          while (t < last) {
+            const tNext = new Date(Math.min(t.getTime() + stepMs, last.getTime()));
+            const segHours = (tNext - t) / (1000 * 60 * 60);
+            const segIsND = isNightDiffTime(t);
+            if (segIsND) r.ndHours = (r.ndHours || 0) + segHours;
+            t = tNext;
+          }
+        }
+      } else {
+        // QR-style events: pair time-in / time-out per day
+        const events = snap.docs
+          .map(d => ({ id: d.id, ...(d.data() || {}) }))
+          .filter(e => e.rawTime && e.mode)
+          .map(e => ({
+            mode: String(e.mode || '').toLowerCase(),
+            time: new Date(e.rawTime)
+          }))
+          .filter(e => !isNaN(e.time.getTime()))
+          .sort((a, b) => a.time - b.time);
+
+        const used = new Set();
+        for (let i = 0; i < events.length; i++) {
+          if (used.has(i)) continue;
+          const evIn = events[i];
+          if (evIn.mode !== 'time-in') continue;
+
+          // find the next unused time-out after this time-in
+          let evOut = null;
+          for (let j = i + 1; j < events.length; j++) {
+            if (used.has(j)) continue;
+            if (events[j].mode === 'time-out' && events[j].time > evIn.time) {
+              evOut = events[j];
+              used.add(j);
+              break;
+            }
+          }
+          if (!evOut) continue;
+
+          used.add(i);
+          const ci = evIn.time;
+          const co = evOut.time;
+          if (!ci || !co || co <= ci) continue;
+
+          const ms = co - ci;
+          const hours = ms / (1000 * 60 * 60);
+
+          const dKey = `${ci.getFullYear()}-${String(ci.getMonth()+1).padStart(2,'0')}-${String(ci.getDate()).padStart(2,'0')}`;
+          perDay[dKey] = (perDay[dKey] || 0) + hours;
+
+          // Late detection based on scheduled shift start and 30-minute grace window
+          if (r.shift) {
+            const shiftStart = getShiftStartForClockIn(r.shift, ci);
+            if (shiftStart && ci > shiftStart) {
+              const diffMs = ci.getTime() - shiftStart.getTime();
+              const diffMin = Math.floor(diffMs / 60000);
+              const graceMin = 30;
+              if (diffMin > graceMin) {
+                const lateMin = diffMin - graceMin;
+                perDayLateMinutes[dKey] = (perDayLateMinutes[dKey] || 0) + lateMin;
+              }
+            }
+          }
+
+          // ND detection in segments (15-min slices)
+          let t = new Date(ci);
+          const last = new Date(co);
+          const stepMs = 15 * 60 * 1000;
+          while (t < last) {
+            const tNext = new Date(Math.min(t.getTime() + stepMs, last.getTime()));
+            const segHours = (tNext - t) / (1000 * 60 * 60);
+            const segIsND = isNightDiffTime(t);
+            if (segIsND) r.ndHours = (r.ndHours || 0) + segHours;
+            t = tNext;
+          }
         }
       }
 
-
       for (const k of Object.keys(perDay)) {
         const h = perDay[k];
-        r.daysWorked += 1;
+
+        // Shift-specific day length: morning/mid = 8h, night = 9h
+        const shiftName = (r.shift || '').toLowerCase();
+        const dayHours = (shiftName === 'night') ? 9 : 8;
+
+        // Convert hours -> days using shift-specific threshold (allow fractional days)
+        r.daysWorked += (h / dayHours);
         r.hoursWorked += h;
-        if (h > 8) r.otHours += (h - 8);
+
+        // Overtime is any work beyond the shift-specific daily hours
+        if (h > dayHours) r.otHours += (h - dayHours);
 
         // UNDER-TIME / LATE detection (conservative default):
         // If daily worked hours < 8, count the difference as UT/Late hours.
         // (This is a simple rule; adjust if you have scheduled shift expected hours.)
-        if (h < 8) {
+        const lateMinutesForDay = perDayLateMinutes[k] || 0;
+        if (lateMinutesForDay > 0) {
+          // convert accumulated late minutes (beyond 30-minute grace) into hours
+          r.utLateHours = (r.utLateHours || 0) + (lateMinutesForDay / 60);
+        } else if (!r.shift && h < 8) {
+          // Fallback when no shift is configured: keep previous behavior
           r.utLateHours = (r.utLateHours || 0) + (8 - h);
         }
       }
@@ -1575,6 +1790,7 @@ async function loadAttendanceForRows(startDateStr, endDateStr) {
 
   setStatus('Attendance loaded.');
   renderTable();
+  hidePayrollLoading();
 }
 
 // Calculate using computePayrollLine; computed values placed on r._calc
@@ -1584,8 +1800,15 @@ function calculateAll() {
              + Number(r.sssCalamityLoan || 0)  // added
              + Number(r.hdmfSalaryLoan || 0)
              + Number(r.hdmfCalamityLoan || 0)
-             + Number(r.cashAdvance || 0);
-    const utLateAmt = Number(r.utLateAmount || 0);
+             + Number(r.cashAdvance || 0)
+             + Number(r.stPeter || 0); // St. Peter treated as manual deduction
+
+    // Under Time / Late Amount = (daily rate / 8) * missing hours
+    const ratePerDayNum = Number(r.ratePerDay || 0);
+    const utHours = Number(r.utLateHours || 0);
+    const utLateAmt = (ratePerDayNum / 8) * utHours;
+    r.utLateAmount = utLateAmt; // reflect back to the UI/rendering model
+
     const adjustmentsCents = toCents(sumLoans + utLateAmt) + Number(r.adjustmentsCents || 0);
 
     // determine payroll period days (if set in the UI) so we can scale statutory contributions
@@ -1645,6 +1868,7 @@ function calculateAll() {
 // Save payroll run — maps UI fields to literal Firestore keys you use in your DB
 async function savePayrollRun() {
   try {
+    showPayrollLoading('Saving payroll run…');
     setStatus('Saving payroll run...');
     const periodStart = document.getElementById('periodStart').value;
     const periodEnd = document.getElementById('periodEnd').value;
@@ -1745,6 +1969,8 @@ async function savePayrollRun() {
   } catch (err) {
     console.error('savePayrollRun error', err);
     setStatus('Failed to save payroll run: ' + (err.message || err), true);
+  } finally {
+    hidePayrollLoading();
   }
 }
 

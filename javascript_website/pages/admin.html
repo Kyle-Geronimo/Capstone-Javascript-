@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HotelLink - Admin</title>
+  <link rel="icon" type="image/png" href="../image/logo/HTLogo.png">
   <link rel="stylesheet" href="../css/styles.css">
   <script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-auth-compat.js"></script>
@@ -21,7 +22,7 @@
     <div class="container">
       <h1>HotelLink</h1>
       <nav>
-        <a href="../index.html" class="nav-btn">Home</a>
+        <a href="../index2.html" class="nav-btn">Home</a>
         <a href="chatbot.html" class="nav-btn restricted">Chatbot Data</a>
         <a href="admin.html" class="nav-btn restricted admin-only">Admin</a>
         <a href="payroll.html" class="nav-btn restricted admin-only">Payroll</a>
@@ -69,24 +70,39 @@
 
   <footer>
     <div class="container">
-      <p>&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>
+      <p style="text-align: center;">&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>
     </div>
   </footer>
   
   <script type="module">
-    import { auth } from '../js/firebase-config.js';
+    import { auth, getUserRole } from '../js/firebase-config.js';
     import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
     import { watchRequestsRealtime, loadAccounts } from '../js/admin.js';
+
     updateNavVisibility();
     highlightActiveNavBtn();
     
-    auth.onAuthStateChanged((user) => {
+    auth.onAuthStateChanged(async (user) => {
       updateNavVisibility();
       highlightActiveNavBtn();
-      if (user) {
-        watchRequestsRealtime(); 
-        loadAccounts(); 
+
+      if (!user) {
+        // Not signed in, send to login
+        window.location.href = 'login.html';
+        return;
       }
+
+      // Only allow admins to stay on this page and see User Management
+      const role = await getUserRole(user.uid);
+      if (role !== 'admin') {
+        // Redirect non-admins (employees) away from admin dashboard
+        window.location.href = 'profile.html';
+        return;
+      }
+
+      // Admins: start realtime watchers
+      watchRequestsRealtime(); 
+      loadAccounts(); 
     });
   </script>
 </body>

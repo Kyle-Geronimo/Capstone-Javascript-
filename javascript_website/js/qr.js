@@ -9,6 +9,7 @@ import {
   getDoc,
   where,
   addDoc,
+  setDoc,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
 import { evaluateForUser } from './payroll-utils.js';
@@ -54,6 +55,49 @@ function dbg(msg) {
   console.log(msg);
 }
 
+// Lightweight toast helper for QR dashboard notifications
+function showQrToast(message, type = 'success') {
+  try {
+    let container = document.getElementById('qr-toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'qr-toast-container';
+      container.style.position = 'fixed';
+      container.style.top = '1.25rem';
+      container.style.right = '1.25rem';
+      container.style.zIndex = '9999';
+      container.style.display = 'flex';
+      container.style.flexDirection = 'column';
+      container.style.gap = '0.5rem';
+      document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.textContent = message;
+    toast.style.minWidth = '220px';
+    toast.style.maxWidth = '320px';
+    toast.style.padding = '0.6rem 0.9rem';
+    toast.style.borderRadius = '0.5rem';
+    toast.style.boxShadow = '0 10px 25px rgba(15,23,42,0.25)';
+    toast.style.fontSize = '0.9rem';
+    toast.style.color = '#0f172a';
+    toast.style.background = type === 'success'
+      ? 'linear-gradient(135deg, #a7f3d0, #6ee7b7)'
+      : 'linear-gradient(135deg, #fecaca, #fca5a5)';
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+      toast.style.transition = 'opacity 200ms ease, transform 200ms ease';
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(-6px)';
+      setTimeout(() => toast.remove(), 220);
+    }, 2200);
+  } catch (_) {
+    // non-fatal: ignore toast errors
+  }
+}
+
 // -------------------- Load users for dropdown --------------------
 export async function loadUsersDropdown() {
   try {
@@ -69,14 +113,12 @@ export async function loadUsersDropdown() {
       const data = d.data();
       const uid = d.id;
       const label = data.username || data.displayName || data.email || uid;
-      // cache all users locally but only add to dropdown those without existing QR
+      // Cache all users locally and always add to dropdown so QR can be regenerated unlimited times
       usersMap.set(uid, { uid, ...data, shift: data.shift || '' });
-      if (!data.qrDataURI) {
-        const opt = document.createElement('option');
-        opt.value = uid;
-        opt.textContent = label;
-        employeeSelect.appendChild(opt);
-      }
+      const opt = document.createElement('option');
+      opt.value = uid;
+      opt.textContent = label;
+      employeeSelect.appendChild(opt);
     });
 
     setStatus(`Loaded ${usersMap.size} users (${employeeSelect.options.length - 1} available for generator).`);
@@ -122,14 +164,18 @@ if (createForm) {
     const token = await auth.currentUser.getIdToken(true);
     const payload = { id: uid, name, role: roleVal, department: deptVal, shift: shiftVal };
 
-    // Preflight: check server health to provide clearer error when backend is down
+    // Preflight: try a best-effort health check, but do NOT block QR generation if it fails.
     try {
       const health = await fetch(`${API_BASE}/health`, { method: 'GET' });
-      if (!health.ok) throw new Error('Server health check failed');
+      if (!health.ok) {
+        let bodyText = '';
+        try { bodyText = await health.text(); } catch (_) {}
+        console.warn('Health check failed (non-blocking)', health.status, bodyText);
+        setStatus(`Warning: health check failed (HTTP ${health.status}). Attempting QR generation anyway...`, false);
+      }
     } catch (netErr) {
-      console.error('API health check failed', netErr);
-      setStatus('Unable to reach backend at ' + API_BASE + '. Start the server (run `npm start` in the project folder).', false);
-      return;
+      console.warn('API health check failed (non-blocking)', netErr);
+      setStatus('Warning: could not reach /health endpoint. Attempting QR generation anyway...', false);
     }
 
     let res, j;
@@ -139,22 +185,50 @@ if (createForm) {
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
         body: JSON.stringify(payload)
       });
-      j = await res.json();
+      // try to parse JSON, but tolerate non‑JSON bodies when there is an error
+      try {
+        j = await res.json();
+      } catch (_) {
+        j = null;
+      }
     } catch (fetchErr) {
       console.error('generateQR fetch failed', fetchErr);
       setStatus('Failed to contact QR generation server. See console.', false);
       return;
     }
-    if (res.ok && j.qrDataURI) {
+
+    if (res.ok && j && j.qrDataURI) {
       qrPreview.innerHTML = `<img src="${j.qrDataURI}" alt="QR">`;
+
+      // Persist latest QR data on the user so other parts of the app (like profile) can reuse it
       try {
-        if (j.id) await updateDoc(doc(db, 'users', j.id), { department: deptVal || null, shift: shiftVal || null });
-      } catch (err) { console.warn('local update doc failed', err); }
-      setStatus('QR created and assigned.');
+        if (j.id) {
+          await updateDoc(doc(db, 'users', j.id), {
+            department: deptVal || null,
+            shift: shiftVal || null,
+            qrDataURI: j.qrDataURI
+          });
+        }
+      } catch (err) {
+        console.warn('local update doc failed', err);
+      }
+
+      // Expose the latest QR globally so Download/Print buttons use the most recent image
+      window.__lastQR = {
+        id: j.id || uid || name,
+        name: name || 'Employee',
+        dataURI: j.qrDataURI
+      };
+
+      setStatus('QR successfully created.');
+      showQrToast('QR successfully created.');
+      // Reload dropdown to refresh any derived info, but users now always remain selectable
       await loadUsersDropdown();
     } else {
-      console.error('generateQR failed', j);
-      setStatus('Failed to generate QR. See console.', false);
+      const statusCode = res.status;
+      const errMsg = (j && (j.error || j.message || j.details)) || 'Unknown error from backend.';
+      console.error('generateQR failed', { status: statusCode, body: j });
+      setStatus(`Failed to generate QR (HTTP ${statusCode}): ${errMsg}`, false);
     }
   });
 }
@@ -329,29 +403,76 @@ export function initializeScanner() {
   document.getElementById('uploadQrImage')?.addEventListener('change', async (ev) => {
     const file = ev.target.files?.[0];
     if (!file) return;
+
+    // Enforce JPG/PNG only
+    const name = file.name || '';
+    const lower = name.toLowerCase();
+    if (!lower.endsWith('.jpg') && !lower.endsWith('.jpeg') && !lower.endsWith('.png')) {
+      addStatus('Only .jpg and .png files are supported for QR image upload.', false);
+      return;
+    }
+
     try {
-      // Support multiple html5-qrcode builds: prefer scanFileV2, fall back to scanFile.
-      let scanResult = null;
-      if (Html5Qrcode && typeof Html5Qrcode.scanFileV2 === 'function') {
-        scanResult = await Html5Qrcode.scanFileV2(file, {});
-      } else if (Html5Qrcode && typeof Html5Qrcode.scanFile === 'function') {
-        // older builds may expose scanFile which returns decoded text or an object
-        scanResult = await Html5Qrcode.scanFile(file, {});
-      } else {
-        throw new Error('Html5Qrcode scanFile API not available in this build');
+      let decodedText = null;
+
+      // Preferred: use Html5Qrcode static file scanning APIs when available
+      if (typeof Html5Qrcode !== 'undefined' && typeof Html5Qrcode.scanFileV2 === 'function') {
+        const scanResult = await Html5Qrcode.scanFileV2(file, {});
+        if (scanResult) {
+          if (typeof scanResult === 'string') decodedText = scanResult;
+          else if (Array.isArray(scanResult) && scanResult.length > 0) decodedText = scanResult[0].decodedText || scanResult[0].text || null;
+          else if (scanResult.decodedText) decodedText = scanResult.decodedText;
+          else if (scanResult.text) decodedText = scanResult.text;
+        }
+      } else if (typeof Html5Qrcode !== 'undefined' && typeof Html5Qrcode.scanFile === 'function') {
+        const scanResult = await Html5Qrcode.scanFile(file, {});
+        if (scanResult) {
+          if (typeof scanResult === 'string') decodedText = scanResult;
+          else if (Array.isArray(scanResult) && scanResult.length > 0) decodedText = scanResult[0].decodedText || scanResult[0].text || null;
+          else if (scanResult.decodedText) decodedText = scanResult.decodedText;
+          else if (scanResult.text) decodedText = scanResult.text;
+        }
       }
 
-      // Normalize result to decodedText string (support different return shapes)
-      let decodedText = null;
-      if (!scanResult) decodedText = null;
-      else if (typeof scanResult === 'string') decodedText = scanResult;
-      else if (Array.isArray(scanResult) && scanResult.length > 0) {
-        // some versions return an array of results
-        decodedText = scanResult[0].decodedText || scanResult[0].text || null;
-      } else if (scanResult.decodedText) decodedText = scanResult.decodedText;
-      else if (scanResult.text) decodedText = scanResult.text;
+      // Fallback: use jsQR if Html5Qrcode does not support file scanning
+      if (!decodedText && typeof window.jsQR === 'function') {
+        const reader = new FileReader();
+        const result = await new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = (e) => reject(e);
+          reader.readAsDataURL(file);
+        });
 
-      if (!decodedText) return addStatus('No QR found in image', false);
+        const img = new Image();
+        const dataUrl = /** @type {string} */ (result || '');
+        await new Promise((resolve, reject) => {
+          img.onload = () => resolve(null);
+          img.onerror = (e) => reject(e);
+          img.src = dataUrl;
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          addStatus('Unable to create canvas for QR decoding.', false);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+        const jsqrResult = window.jsQR(imageData.data, imageData.width, imageData.height);
+        if (jsqrResult && jsqrResult.data) {
+          decodedText = jsqrResult.data;
+        }
+      }
+
+      if (!decodedText) {
+        addStatus('No QR found in image', false);
+        return;
+      }
+
       await processDecodedText(decodedText);
     } catch (err) {
       console.error('scanFile err', err);
@@ -364,37 +485,179 @@ export function initializeScanner() {
   }
   async function onScanSuccess(decodedText, decodedResult) {
     try {
-      let payload;
-      try { payload = JSON.parse(decodedText); } catch(e) { payload = { id: decodedText }; }
-      await processDecodedText(payload);
+      await processDecodedText(decodedText);
     } catch (err) {
       console.error('onScanSuccess err', err);
       addStatus('Error processing QR', false);
     }
   }
 
-  async function processDecodedText(payload) {
+  async function processDecodedText(decodedTextOrPayload) {
+    let payload;
+    if (typeof decodedTextOrPayload === 'string') {
+      try {
+        payload = JSON.parse(decodedTextOrPayload);
+      } catch (e) {
+        payload = { id: decodedTextOrPayload };
+      }
+    } else {
+      payload = decodedTextOrPayload || {};
+    }
+
     const id = payload.id || payload.qrValue || payload.value || null;
     let userDoc = null;
+
+    // 1) Try users collection by document ID (modern flow)
     if (id) {
-      const uref = doc(db, 'users', id);
-      const usnap = await getDoc(uref);
-      if (usnap.exists()) userDoc = { id: usnap.id, ...(usnap.data()||{}) };
+      try {
+        const uref = doc(db, 'users', id);
+        const usnap = await getDoc(uref);
+        if (usnap.exists()) userDoc = { id: usnap.id, ...(usnap.data() || {}) };
+      } catch (e) {
+        console.warn('users/id lookup failed', e);
+      }
     }
-    if (!userDoc && payload.qrValue) {
-      const q = query(collection(db, 'users'), where('qrValue','==', payload.qrValue));
-      const snaps = await getDocs(q);
-      if (!snaps.empty) { const d = snaps.docs[0]; userDoc = { id: d.id, ...(d.data()||{}) }; }
+
+    // 2) Try users collection by qrValue field (covers QRs that encode a separate qrValue)
+    if (!userDoc && (payload.qrValue || id)) {
+      try {
+        const val = payload.qrValue || id;
+        const uq = query(collection(db, 'users'), where('qrValue', '==', val));
+        const usnaps = await getDocs(uq);
+        if (!usnaps.empty) {
+          const d = usnaps.docs[0];
+          userDoc = { id: d.id, ...(d.data() || {}) };
+        }
+      } catch (e) {
+        console.warn('users qrValue lookup failed', e);
+      }
     }
+
+    // 3) Legacy employees collection by document ID
+    if (!userDoc && id) {
+      try {
+        const eref = doc(db, 'employees', id);
+        const esnap = await getDoc(eref);
+        if (esnap.exists()) {
+          const data = esnap.data() || {};
+          userDoc = {
+            id: esnap.id,
+            username: data.name || data.username || null,
+            role: data.role || 'employee',
+            shift: data.shift || null,
+            qrValue: data.qrValue || id
+          };
+        }
+      } catch (e) {
+        console.warn('employees/id lookup failed', e);
+      }
+    }
+
+    // 4) Legacy employees collection by qrValue
+    if (!userDoc && (payload.qrValue || id)) {
+      try {
+        const val = payload.qrValue || id;
+        const eq = query(collection(db, 'employees'), where('qrValue', '==', val));
+        const esnaps = await getDocs(eq);
+        if (!esnaps.empty) {
+          const d = esnaps.docs[0];
+          const data = d.data() || {};
+          userDoc = {
+            id: d.id,
+            username: data.name || data.username || null,
+            role: data.role || 'employee',
+            shift: data.shift || null,
+            qrValue: data.qrValue || val
+          };
+        }
+      } catch (e) {
+        console.warn('employees qrValue lookup failed', e);
+      }
+    }
+
+    // 5) As a last resort, if we decoded an id but found no matching record,
+    //    create a lightweight users document so this QR becomes valid going forward.
+    if (!userDoc && id) {
+      try {
+        const fallbackData = {
+          username: payload.name || null,
+          role: payload.role || 'employee',
+          qrValue: payload.qrValue || id,
+          createdAt: serverTimestamp()
+        };
+        const uref = doc(db, 'users', id);
+        await setDoc(uref, fallbackData, { merge: true });
+        userDoc = { id, ...fallbackData };
+        addDebug(`Created lightweight user record for scanned QR id=${id}`);
+      } catch (e) {
+        console.warn('failed to create fallback user for QR', e);
+        // Even if Firestore write fails (e.g. security rules), still build an
+        // in-memory user so we can record attendance for this id.
+        userDoc = {
+          id,
+          username: payload.name || null,
+          role: payload.role || 'employee',
+          shift: payload.shift || null,
+          qrValue: payload.qrValue || id
+        };
+        addDebug(`Using in-memory user for scanned QR id=${id} (Firestore write failed)`);
+      }
+    }
+
+    if (!userDoc && id) {
+      // Final fallback: in-memory user from id only
+      userDoc = { id, username: null, role: 'employee', shift: null, qrValue: id };
+      addDebug(`Using minimal in-memory user for scanned QR id=${id}`);
+    }
+
     if (!userDoc) { addStatus('QR not linked to user', false); return; }
 
     const now = new Date();
     const evalRes = evaluateForUser({ shift: userDoc.shift || 'morning' }, now);
 
+    // Enforce: at most one time-in and one time-out per user per calendar day
+    const mode = currentMode === 'in' ? 'time-in' : 'time-out';
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const startIso = startOfDay.toISOString();
+    const endIso = endOfDay.toISOString();
+
+    try {
+      const todayQ = query(
+        collection(db, 'attendance'),
+        where('userId', '==', userDoc.id),
+        where('rawTime', '>=', startIso),
+        where('rawTime', '<', endIso)
+      );
+      const todaySnap = await getDocs(todayQ);
+      let hasTimeIn = false;
+      let hasTimeOut = false;
+      todaySnap.forEach(d => {
+        const m = d.data()?.mode;
+        if (m === 'time-in') hasTimeIn = true;
+        if (m === 'time-out') hasTimeOut = true;
+      });
+
+      if (mode === 'time-in' && hasTimeIn) {
+        addStatus(`Duplicate time-in blocked for ${userDoc.username || userDoc.email || userDoc.id} (already has time-in today).`, false);
+        addDebug(`Blocked duplicate time-in for user ${userDoc.id} on ${startIso}`);
+        return;
+      }
+      if (mode === 'time-out' && hasTimeOut) {
+        addStatus(`Duplicate time-out blocked for ${userDoc.username || userDoc.email || userDoc.id} (already has time-out today).`, false);
+        addDebug(`Blocked duplicate time-out for user ${userDoc.id} on ${startIso}`);
+        return;
+      }
+    } catch (err) {
+      console.error('Attendance check failed', err);
+      addDebug('Attendance check failed: ' + (err.message || String(err)));
+      // If the check fails, we still proceed with recording to avoid blocking all scans.
+    }
+
     const record = {
       userId: userDoc.id,
       username: userDoc.username || userDoc.email || null,
-      mode: currentMode === 'in' ? 'time-in' : 'time-out',
+      mode,
       recordedTime: evalRes.recordedTime.toISOString(),
       rawTime: now.toISOString(),
       status: evalRes.status,

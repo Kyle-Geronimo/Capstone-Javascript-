@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <title>Payroll — HRIS</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="icon" type="image/png" href="../image/logo/HTLogo.png">
   <link rel="stylesheet" href="../css/styles.css">
   <!-- Add UI improvements after base styles -->
   <link rel="stylesheet" href="../css/payroll-enhancements.css">
@@ -13,7 +14,7 @@
     <div class="container">
       <h1>HotelLink</h1>
       <nav>
-        <a href="../index.html" class="nav-btn">Home</a>
+        <a href="../index2.html" class="nav-btn">Home</a>
         <a href="chatbot.html" class="nav-btn restricted">Chatbot Data</a>
         <a href="admin.html" class="nav-btn restricted admin-only">Admin</a>
         <a href="payroll.html" class="nav-btn restricted admin-only">Payroll</a>
@@ -114,7 +115,7 @@
           <tr>
             <th>#</th>
             <th>Username</th>
-            <th>Rate/Day</th>
+            <th>Rate</th>
             <th>Days</th>
             <th>Hours (auto)</th>
             <th>ND hrs</th>
@@ -142,16 +143,26 @@
         <tbody id="payrollBody"></tbody>
       </table>
     </div>
+
+    <!-- Payroll loading overlay -->
+    <div id="payrollLoadingOverlay" class="hidden" aria-hidden="true">
+      <div class="payroll-loading-backdrop"></div>
+      <div class="payroll-loading-content" role="status" aria-live="polite">
+        <div class="spinner"></div>
+        <div id="payrollLoadingText">Processing payroll…</div>
+      </div>
+    </div>
+
   </main>
 
   <footer>
     <div class="container">
-      <p>&copy; 2025 D’ Mariners Inn Hotel. All rights reserved.</p>
+      <p style="text-align: center;">&copy; 2025 D’ Mariners Inn Hotel. All rights reserved.</p>
     </div>
   </footer>
 
-  <script type="module" src="../js/nav-control.js"></script>
   <script type="module" src="../js/firebase-config.js"></script>
+
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/shim.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <script type="module" src="../js/payroll.js"></script>
@@ -159,19 +170,41 @@
   <!-- Include the small UI enhancement script AFTER payroll.js (rebind helper exposed by payroll-ui.js) -->
   <script type="module" src="../js/payroll-ui.js"></script>
 
-  <script>
-    // ensure nav visibility helpers run if available
-    if (typeof updateNavVisibility === 'function') updateNavVisibility();
-    if (typeof highlightActiveNavBtn === 'function') highlightActiveNavBtn();
+  <script type="module">
+    import { auth, getUserRole } from '../js/firebase-config.js';
+    import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
 
-    // if payroll.js re-renders the table after async load, rebind UI hooks
-    // (payroll.js already exposes window.rebindPayrollUI in payroll-ui.js)
-    // call it once page is ready
-    document.addEventListener('DOMContentLoaded', () => {
-      if (typeof window.rebindPayrollUI === 'function') window.rebindPayrollUI();
-      // also call after a short delay to catch async renders
-      setTimeout(() => { if (typeof window.rebindPayrollUI === 'function') window.rebindPayrollUI(); }, 800);
+    // ensure nav visibility helpers run
+    updateNavVisibility();
+    highlightActiveNavBtn();
+
+    auth.onAuthStateChanged(async (user) => {
+      updateNavVisibility();
+      highlightActiveNavBtn();
+
+      if (!user) {
+        // Not signed in, send to login
+        window.location.href = 'login.html';
+        return;
+      }
+
+      const role = await getUserRole(user.uid);
+      if (role !== 'admin') {
+        // Block employees from payroll dashboard
+        window.location.href = 'profile.html';
+        return;
+      }
+
+      // if payroll.js re-renders the table after async load, rebind UI hooks
+      // (payroll.js already exposes window.rebindPayrollUI in payroll-ui.js)
+      // call it once page is ready
+      document.addEventListener('DOMContentLoaded', () => {
+        if (typeof window.rebindPayrollUI === 'function') window.rebindPayrollUI();
+        // also call after a short delay to catch async renders
+        setTimeout(() => { if (typeof window.rebindPayrollUI === 'function') window.rebindPayrollUI(); }, 800);
+      });
     });
   </script>
+
 </body>
 </html>

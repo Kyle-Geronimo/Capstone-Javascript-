@@ -357,6 +357,21 @@ async function onApprove(e) {
     }
     const token = await getIdToken(currentUser, true);
 
+    let adminPin = null;
+    if ((reqData.role || 'employee') === 'admin') {
+      // Ask the approver to set a 6-digit PIN for this admin account
+      adminPin = prompt('Enter a 6-digit PIN for this admin (used to unlock QR Dashboard):', '');
+      if (!adminPin) {
+        alert('Admin PIN is required for admin accounts.');
+        return;
+      }
+      adminPin = String(adminPin).trim();
+      if (!/^\d{6}$/.test(adminPin)) {
+        alert('PIN must be exactly 6 digits (numbers only).');
+        return;
+      }
+    }
+
     const response = await fetch(`${API_BASE}/api/createUser`, {
       method: 'POST',
       headers: {
@@ -367,7 +382,8 @@ async function onApprove(e) {
         email: email,
         password: reqData.password,
         username: reqData.username,
-        role: reqData.role || 'employee'
+        role: reqData.role || 'employee',
+        pin: adminPin
       })
     });
 

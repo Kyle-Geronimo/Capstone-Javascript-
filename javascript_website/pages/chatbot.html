@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>HotelLink - Chatbot Inquiries</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../image/logo/HTLogo.png">
   <link rel="stylesheet" href="../css/styles.css">
 
 </head>
@@ -12,7 +13,7 @@
     <div class="container">
       <h1>HotelLink</h1>
       <nav>
-        <a href="../index.html" class="nav-btn restricted">Home</a>
+        <a href="../index2.html" class="nav-btn restricted">Home</a>
         <a href="chatbot.html" class="nav-btn restricted">Chatbot Data</a>
         <a href="admin.html" class="nav-btn restricted admin-only">Admin</a>
         <a href="payroll.html" class="nav-btn restricted admin-only">Payroll</a>
@@ -21,6 +22,15 @@
     </div>
   </header>
 
+      <div class="dashboard-analytics-row">
+        <section class="chatbot-analytics-section">
+          <div id="chatbot-analytics" class="chatbot-analytics" aria-live="polite"></div>
+        </section>
+
+        <section class="chatbot-analytics-section">
+          <div id="account-analytics" class="chatbot-analytics" aria-live="polite"></div>
+        </section>
+      </div>
 
       <ul id="chatbot-data" class="chat-list" aria-live="polite">
         <!-- JS will inject <li class="chat-item"> entries here -->
@@ -42,7 +52,7 @@
   <script type="module">
     import { auth } from '../js/firebase-config.js';
     import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
-    import { loadChatbotData } from '../js/chatbot.js';
+    import { loadChatbotData, initChatbotAnalyticsRealtime, initAccountAnalyticsRealtime } from '../js/chatbot.js';
 
 
     auth.onAuthStateChanged((user) => {
@@ -64,6 +74,8 @@
 
 
       loadChatbotData();
+      initChatbotAnalyticsRealtime();
+      initAccountAnalyticsRealtime();
     });
   </script>
 </body>

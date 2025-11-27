@@ -3,7 +3,12 @@
 
 // config (editable)
 export const PAYROLL_CONFIG = {
+  // OT premium multiplier (additional on top of base pay already counted in daysWorked)
+  // 1.25 means each OT hour adds 125% of the hourly rate as OT premium.
+  // Since the base pay for those hours is already in daysWorked * ratePerDay,
+  // effective OT compensation per hour is 225% of the normal hourly rate.
   otMultiplier: 1.25,
+  // Night differential premium rate (10% of hourly rate for ND hours)
   ndRate: 0.10,
   regularHolidayMultiplier: 2.0,
   specialHolidayMultiplier: 1.3,
@@ -210,15 +215,21 @@ export function computePayrollLine({
   const ndTotalHours = Number(ndHours || 0);
   const ndRegularHours = Math.max(0, ndTotalHours - ndOtH);
 
-  // night differential: applies to ND regular hours AND ND-on-OT hours
-  if (ndTotalHours > 0) {
-    const ndExtra = Math.round(hourlyCents * ndTotalHours * PAYROLL_CONFIG.ndRate);
-    grossCents += ndExtra;
+  // night differential premium:
+  // - regular ND hours: +10% of hourly
+  // - ND on OT hours:   also +10% of hourly (OT premium handled separately below)
+  if (ndRegularHours > 0) {
+    const ndRegExtra = Math.round(hourlyCents * ndRegularHours * PAYROLL_CONFIG.ndRate);
+    grossCents += ndRegExtra;
+  }
+  if (ndOtH > 0) {
+    const ndOtExtra = Math.round(hourlyCents * ndOtH * PAYROLL_CONFIG.ndRate);
+    grossCents += ndOtExtra;
   }
 
-  // overtime: OT multiplier applied to all OT hours
+  // overtime: add OT premium on top of base pay already included via daysWorked
   if (Number(otHours) > 0) {
-    // OT pay is base * OT multiplier for all OT hours
+    // Each OT hour contributes an additional PAYROLL_CONFIG.otMultiplier * hourly
     const ot = Math.round(hourlyCents * Number(otHours) * PAYROLL_CONFIG.otMultiplier);
     grossCents += ot;
   }
@@ -245,6 +256,7 @@ export function computePayrollLine({
   let philEmployee = 0, philEmployer = 0, philTotal = 0;
   let pagibigEmployee = 0, pagibigEmployer = 0, pagibigTotal = 0;
 
+  // --- SSS: still based on monthly salary + SSS table/approx ---
   if (monthlySalary !== null && monthlySalary !== undefined) {
     if (sssOverride && (typeof sssOverride.employee === 'number' || typeof sssOverride.employer === 'number')) {
       // use provided table values (assumed in PHP), scale and convert to cents
@@ -257,45 +269,25 @@ export function computePayrollLine({
       sssEmployer = Math.round(sss.employer * Number(periodScaling || 1));
       sssTotal = sssEmployee + sssEmployer;
     }
-
-    const phil = computePhilhealthFromMonthlySalary(monthlySalary);
-    philEmployee = Math.round(phil.employee * Number(periodScaling || 1));
-    philEmployer = Math.round(phil.employer * Number(periodScaling || 1));
-    philTotal = philEmployee + philEmployer;
-
-    const pag = computePagibigFromMonthlySalary(monthlySalary);
-    pagibigEmployee = Math.round(pag.employee * Number(periodScaling || 1));
-    pagibigEmployer = Math.round(pag.employer * Number(periodScaling || 1));
-    pagibigTotal = pagibigEmployee + pagibigEmployer;
-
-    // If caller provided a manual pagibig amount (PHP), use it for the employee share (override automated calc)
-    if (manualPagibig !== null && manualPagibig !== undefined && manualPagibig !== '') {
-      const manualC = Math.round(Number(manualPagibig || 0) * 100);
-      pagibigEmployee = manualC;
-      // adjust total — keep employer as previously computed
-      pagibigTotal = pagibigEmployee + pagibigEmployer;
-    }
   } else {
-    // fallback: use simple percents on gross (legacy behavior)
+    // legacy simple-percent fallback on gross when no monthly base is available
     sssEmployee = Math.round(grossCents * PAYROLL_CONFIG.sssPercent);
     sssEmployer = 0;
     sssTotal = sssEmployee;
-
-    philEmployee = Math.round(grossCents * PAYROLL_CONFIG.philhealthPercent);
-    philEmployer = 0;
-    philTotal = philEmployee;
-
-    // If manual pagibig provided, use it (employee-side) as absolute cents value
-    if (manualPagibig !== null && manualPagibig !== undefined && manualPagibig !== '') {
-      pagibigEmployee = Math.round(Number(manualPagibig || 0) * 100);
-      pagibigEmployer = 0;
-      pagibigTotal = pagibigEmployee;
-    } else {
-      pagibigEmployee = Math.round(grossCents * PAYROLL_CONFIG.pagibigPercent);
-      pagibigEmployer = 0;
-      pagibigTotal = pagibigEmployee;
-    }
   }
+
+  // --- PhilHealth (custom rule): 2.5% of 26 days * daily rate, employee-only ---
+  const dailyRateNum = Number(ratePerDay || 0);
+  const philhealthBasePHP = dailyRateNum * 26 * 0.025; // 2.5% of 26 days * ratePerDay
+  philEmployee = Math.round(philhealthBasePHP * 100);
+  philEmployer = 0;
+  philTotal = philEmployee;
+
+  // --- Pag-IBIG (custom rule): fixed 200 PHP, employee-only ---
+  const pagibigPHP = 200;
+  pagibigEmployee = Math.round(pagibigPHP * 100);
+  pagibigEmployer = 0;
+  pagibigTotal = pagibigEmployee;
 
   // St. Peter Life Plan (employee-only)
   const stPeter = Math.round(grossCents * Number(PAYROLL_CONFIG.stPeterPercent || 0));

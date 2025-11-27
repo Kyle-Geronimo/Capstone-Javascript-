@@ -6,7 +6,10 @@ import {
     query, 
     orderBy, 
     serverTimestamp,
-    limit 
+    limit,
+    onSnapshot,
+    doc,
+    deleteDoc
 } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
 
 // Function to categorize inquiries based on keywords
@@ -72,21 +75,6 @@ export async function loadChatbotData() {
             return;
         }
 
-        // Create a query to get all inquiries, ordered by timestamp
-        const inquiriesQuery = query(
-            collection(db, 'chatbot'),
-            orderBy('timestamp', 'desc'),
-            limit(100) // Limit to last 100 inquiries for performance
-        );
-        
-        // Get the inquiries data
-        const snap = await getDocs(inquiriesQuery);
-        
-        if (snap.empty) {
-            container.innerHTML = "<div class='no-data'>No chatbot inquiries available.</div>";
-            return;
-        }
-
         // Define all possible categories
         const allCategories = [
             'all',
@@ -100,20 +88,27 @@ export async function loadChatbotData() {
             'policies',
             'general'
         ];
-        
-        // Format and display the inquiries
+
+        // Static shell for the table; body will be updated in real time
         container.innerHTML = `
             <div class="chatbot-inquiries">
-                <h2>Chatbot Inquiries</h2>
+                <div class="chatbot-inquiries-header">
+                    <h2>Chatbot Inquiries</h2>
+                    <div class="chatbot-inquiries-actions">
+                        <button type="button" class="chat-print-selected">Print selected</button>
+                    </div>
+                </div>
                 <div class="table-container">
                     <table class="data-table">
                         <thead>
                             <tr>
+                                <th style="width:32px;text-align:center;"><input type="checkbox" class="chat-select-all" aria-label="Select all conversations" /></th>
                                 <th class="sortable" data-sort="time">
                                     Time
                                     <span class="sort-icon">↕</span>
                                 </th>
                                 <th>Question</th>
+                                <th>Bot reply</th>
                                 <th class="sortable" data-sort="category">
                                     Category
                                     <select class="category-filter">
@@ -134,54 +129,98 @@ export async function loadChatbotData() {
                                         }).join('')}
                                     </select>
                                 </th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            ${snap.docs.map(doc => {
-                                const inquiry = doc.data();
-                                const timestamp = inquiry.timestamp?.toDate() || new Date();
-                                return `
-                                    <tr data-timestamp="${timestamp.getTime()}" data-category="${escapeHtml(inquiry.category || 'general')}">
-                                        <td>${timestamp.toLocaleString()}</td>
-                                        <td>${escapeHtml(inquiry.question || '')}</td>
-                                        <td data-category="${escapeHtml(inquiry.category || 'general')}">${escapeHtml(inquiry.category || 'general')}</td>
-                                    </tr>
-                                `;
-                            }).join('')}
-                        </tbody>
+                        <tbody></tbody>
                     </table>
                 </div>
             </div>
         `;
 
-        // Add event listeners for sorting and filtering
+        const tbody = container.querySelector('tbody');
+        const selectAllCheckbox = container.querySelector('.chat-select-all');
+        const printSelectedBtn = container.querySelector('.chat-print-selected');
+        // deleteSelectedBtn removed (no delete functionality, only print)
         const timeHeader = container.querySelector('th[data-sort="time"]');
         const categoryFilter = container.querySelector('.category-filter');
         let timeSort = 'desc'; // Start with newest first
 
-        // Time sorting
+        // View conversation modal (uses answer stored on the chatbot document)
+        const openConversationModal = (questionText, answerText) => {
+            const backdrop = document.createElement('div');
+            backdrop.className = 'chat-convo-backdrop';
+            const hasAnswer = !!(answerText && answerText.trim());
+            backdrop.innerHTML = `
+                <div class="chat-convo-modal">
+                    <div class="chat-convo-header">
+                        <h3>Conversation</h3>
+                        <button type="button" class="chat-convo-close" aria-label="Close">×</button>
+                    </div>
+                    <div class="chat-convo-body">
+                        <div class="chat-convo-question"><strong>Question:</strong> <span>${escapeHtml(questionText)}</span></div>
+                        <div class="chat-convo-responses">
+                            ${hasAnswer
+                                ? `<div class="chat-convo-entry">
+                                       <div class="chat-convo-meta">Bot reply</div>
+                                       <div class="chat-convo-text">${escapeHtml(answerText)}</div>
+                                   </div>`
+                                : '<p class="chat-convo-empty">No bot reply has been attached to this question yet.</p>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(backdrop);
+
+            const close = () => {
+                backdrop.remove();
+            };
+
+            backdrop.addEventListener('click', (ev) => {
+                if (ev.target === backdrop) close();
+            });
+            const closeBtn = backdrop.querySelector('.chat-convo-close');
+            if (closeBtn) closeBtn.addEventListener('click', close);
+        };
+
+        // Helper: (re)wire row-level events
+        const wireRowEvents = () => {
+            const rows = container.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const btn = row.querySelector('.chat-view-btn');
+                const questionCell = row.querySelector('.inquiry-question');
+                if (!btn || !questionCell) return;
+                const questionText = questionCell.textContent || '';
+                const answerText = row.dataset.answer || '';
+                btn.onclick = () => {
+                    if (!questionText) return;
+                    openConversationModal(questionText, answerText);
+                };
+            });
+        };
+
+        // Time sorting (works on current rows)
         timeHeader.addEventListener('click', () => {
-            const tbody = container.querySelector('tbody');
             const rows = Array.from(tbody.querySelectorAll('tr'));
-            
             rows.sort((a, b) => {
                 const timeA = parseInt(a.dataset.timestamp);
                 const timeB = parseInt(b.dataset.timestamp);
                 return timeSort === 'desc' ? timeB - timeA : timeA - timeB;
             });
-            
+
             timeSort = timeSort === 'desc' ? 'asc' : 'desc';
             timeHeader.querySelector('.sort-icon').textContent = timeSort === 'desc' ? '↓' : '↑';
-            
+
             tbody.innerHTML = '';
             rows.forEach(row => tbody.appendChild(row));
+            wireRowEvents();
         });
 
         // Category filtering
         categoryFilter.addEventListener('change', (e) => {
             const selectedCategory = e.target.value;
             const rows = container.querySelectorAll('tbody tr');
-            
+
             rows.forEach(row => {
                 if (selectedCategory === 'all' || row.dataset.category === selectedCategory) {
                     row.style.display = '';
@@ -191,9 +230,351 @@ export async function loadChatbotData() {
             });
         });
 
+        // Select-all checkbox
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', (e) => {
+                const checked = e.target.checked;
+                const boxes = container.querySelectorAll('.chat-select');
+                boxes.forEach(box => { box.checked = checked; });
+            });
+        }
+
+        // Helper: get selected row data
+        const getSelectedRows = () => {
+            const rows = Array.from(container.querySelectorAll('tbody tr'));
+            return rows.filter(row => {
+                const box = row.querySelector('.chat-select');
+                return box && box.checked;
+            });
+        };
+
+        // Delete functionality removed; conversations can only be printed now.
+
+        // Print selected conversations
+        if (printSelectedBtn) {
+            printSelectedBtn.addEventListener('click', () => {
+                const selectedRows = getSelectedRows();
+                if (!selectedRows.length) {
+                    alert('No conversations selected.');
+                    return;
+                }
+
+                const items = selectedRows.map(row => {
+                    const timeText = row.querySelector('td:nth-child(2)')?.textContent || '';
+                    const questionText = row.querySelector('.inquiry-question')?.textContent || '';
+                    // Read the full answer from the row dataset so the table cell can stay hidden
+                    const answerText = row.dataset.answer || '';
+                    const categoryText = row.querySelector('td[data-category]')?.textContent || '';
+                    return { timeText, questionText, answerText, categoryText };
+                });
+
+                const win = window.open('', '_blank');
+                if (!win) return;
+                win.document.write(`<!DOCTYPE html><html><head><title>Chatbot Conversations</title>
+                    <style>
+                        body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 16px; }
+                        h1 { font-size: 1.4rem; margin-bottom: 12px; }
+                        .conv { margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #e5e7eb; }
+                        .meta { font-size: 0.8rem; color: #6b7280; margin-bottom: 4px; }
+                        .q { font-weight: 600; margin-bottom: 4px; }
+                        .a { white-space: pre-wrap; }
+                    </style>
+                </head><body>
+                    <h1>Chatbot Conversations</h1>
+                    ${items.map(item => `
+                        <div class="conv">
+                            <div class="meta">${item.timeText} · ${item.categoryText}</div>
+                            <div class="q">Q: ${item.questionText}</div>
+                            <div class="a">A: ${item.answerText}</div>
+                        </div>
+                    `).join('')}
+                </body></html>`);
+                win.document.close();
+                win.focus();
+                win.print();
+            });
+        }
+
+        // Realtime listener for chatbot inquiries
+        const inquiriesQuery = query(
+            collection(db, 'chatbot'),
+            orderBy('timestamp', 'desc'),
+            limit(100)
+        );
+
+        onSnapshot(inquiriesQuery, (snap) => {
+            if (snap.empty) {
+                tbody.innerHTML = "<tr><td colspan='6'><div class='no-data'>No chatbot inquiries available.</div></td></tr>";
+                return;
+            }
+
+            const rowsHtml = snap.docs.map(doc => {
+                const inquiry = doc.data() || {};
+                const timestamp = inquiry.timestamp?.toDate ? inquiry.timestamp.toDate() : new Date();
+                const categorySafe = escapeHtml(inquiry.category || 'general');
+                const questionSafe = escapeHtml(inquiry.question || '');
+                const answerSafe = escapeHtml(inquiry.answer || '');
+                return `
+                    <tr data-id="${doc.id}" data-timestamp="${timestamp.getTime()}" data-category="${categorySafe}" data-answer="${answerSafe}">
+                        <td style="text-align:center;"><input type="checkbox" class="chat-select" aria-label="Select conversation" /></td>
+                        <td>${timestamp.toLocaleString()}</td>
+                        <td class="inquiry-question">${questionSafe}</td>
+                        <td class="inquiry-answer"><span class="muted">(hidden - click View)</span></td>
+                        <td data-category="${categorySafe}">${categorySafe}</td>
+                        <td>
+                            <button type="button" class="chat-view-btn">View conversation</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            tbody.innerHTML = rowsHtml;
+            wireRowEvents();
+        }, (error) => {
+            console.error('Error loading chatbot inquiries realtime:', error);
+            tbody.innerHTML = `<tr><td colspan='6'><div class="error-message">Error loading chatbot inquiries: ${escapeHtml(error.message)}</div></td></tr>`;
+        });
+
         // Add some basic styling
         const style = document.createElement('style');
         style.textContent = `
+            .chatbot-page {
+                min-height: 100vh;
+                background: radial-gradient(circle at top, #dbeafe 0, #eff6ff 28%, #f9fafb 60%, #f9fafb 100%);
+            }
+            .dashboard-analytics-row {
+                max-width: 1180px;
+                margin: 24px auto 8px auto;
+                padding: 0 16px;
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+                gap: 16px;
+            }
+            .chatbot-analytics-section {
+                margin: 0;
+            }
+            .chatbot-analytics {
+                display: flex;
+                justify-content: center;
+                align-items: stretch;
+            }
+            .analytics-card {
+                width: 100%;
+                max-width: 1180px;
+                background: #ffffff;
+                border-radius: 18px;
+                padding: 20px 24px 18px 24px;
+                box-shadow: 0 18px 45px rgba(15, 23, 42, 0.16);
+                border: 1px solid rgba(148, 163, 184, 0.5);
+            }
+            .analytics-header {
+                display: flex;
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: baseline;
+                gap: 10px;
+                margin-bottom: 14px;
+            }
+            .analytics-header h2 {
+                margin: 0;
+                font-size: 1.25rem;
+                font-weight: 600;
+                color: #0f172a;
+            }
+            .analytics-subtitle {
+                margin: 0;
+                font-size: 0.85rem;
+                color: #64748b;
+            }
+            .analytics-metric {
+                display: inline-flex;
+                align-items: baseline;
+                gap: 8px;
+                margin-bottom: 10px;
+                padding: 8px 14px;
+                border-radius: 999px;
+                background: radial-gradient(circle at top left, #e0f2fe, #eef2ff);
+            }
+            .analytics-label {
+                font-size: 0.78rem;
+                text-transform: uppercase;
+                letter-spacing: 0.09em;
+                font-weight: 600;
+                color: #0f172a;
+            }
+            .analytics-value {
+                font-size: 1.4rem;
+                font-weight: 700;
+                color: #0f172a;
+            }
+            .analytics-categories {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                margin-top: 6px;
+            }
+            .analytics-category-row {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+            .analytics-category-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                font-size: 0.85rem;
+            }
+            .analytics-category-name {
+                text-transform: capitalize;
+                color: #0f172a;
+                font-weight: 500;
+            }
+            .analytics-category-count {
+                font-variant-numeric: tabular-nums;
+                color: #64748b;
+                font-size: 0.8rem;
+            }
+            .analytics-bar {
+                width: 100%;
+                height: 6px;
+                border-radius: 999px;
+                background: #e5e7eb;
+                overflow: hidden;
+            }
+            .analytics-bar-fill {
+                height: 100%;
+                border-radius: 999px;
+                background: linear-gradient(90deg, #0ea5e9, #6366f1);
+                transition: width 0.35s ease-out;
+            }
+            /* Category-specific bar colors */
+            .analytics-bar-fill--rooms { background: linear-gradient(90deg, #3b82f6, #1d4ed8); }
+            .analytics-bar-fill--dining { background: linear-gradient(90deg, #ec4899, #db2777); }
+            .analytics-bar-fill--amenities { background: linear-gradient(90deg, #22c55e, #15803d); }
+            .analytics-bar-fill--pricing { background: linear-gradient(90deg, #f97316, #c2410c); }
+            .analytics-bar-fill--location { background: linear-gradient(90deg, #06b6d4, #0e7490); }
+            .analytics-bar-fill--services { background: linear-gradient(90deg, #a855f7, #7e22ce); }
+            .analytics-bar-fill--events { background: linear-gradient(90deg, #facc15, #eab308); }
+            .analytics-bar-fill--policies { background: linear-gradient(90deg, #6366f1, #4f46e5); }
+            .analytics-bar-fill--general { background: linear-gradient(90deg, #9ca3af, #4b5563); }
+
+            /* Filters */
+            .analytics-filters {
+                display: inline-flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                margin-bottom: 10px;
+            }
+            .analytics-filter {
+                border-radius: 999px;
+                border: 1px solid #e5e7eb;
+                background: #f9fafb;
+                padding: 4px 10px;
+                font-size: 0.78rem;
+                color: #4b5563;
+                cursor: pointer;
+                transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+            }
+            .analytics-filter:hover {
+                background: #e5f2ff;
+                border-color: #bfdbfe;
+            }
+            .analytics-filter.is-active {
+                background: #0ea5e9;
+                border-color: #0ea5e9;
+                color: #ffffff;
+            }
+            .analytics-users-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 10px;
+                margin-top: 8px;
+            }
+            .analytics-user-card {
+                padding: 10px 12px;
+                border-radius: 12px;
+                background: #f9fafb;
+                border: 1px solid #e5e7eb;
+            }
+            .analytics-user-label {
+                font-size: 0.78rem;
+                text-transform: uppercase;
+                letter-spacing: 0.08em;
+                color: #6b7280;
+            }
+            .analytics-user-value {
+                margin-top: 4px;
+                font-size: 1.25rem;
+                font-weight: 600;
+                color: #111827;
+            }
+            .analytics-user-sub {
+                margin-top: 2px;
+                font-size: 0.75rem;
+                color: #9ca3af;
+            }
+            .analytics-footnote {
+                margin-top: 10px;
+                font-size: 0.74rem;
+                color: #9ca3af;
+            }
+            .visitors-chart {
+                margin-top: 14px;
+                padding-top: 8px;
+                border-top: 1px dashed #e5e7eb;
+            }
+            .visitors-chart-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: baseline;
+                margin-bottom: 8px;
+            }
+            .visitors-chart-title {
+                font-size: 0.85rem;
+                font-weight: 600;
+                color: #0f172a;
+            }
+            .visitors-chart-subtitle {
+                font-size: 0.75rem;
+                color: #9ca3af;
+            }
+            .visitors-chart-bars {
+                display: grid;
+                grid-template-columns: repeat(12, minmax(0, 1fr));
+                gap: 4px;
+                align-items: flex-end;
+            }
+            .visitors-bar {
+                position: relative;
+                height: 70px;
+                border-radius: 999px;
+                background: #e5e7eb;
+                overflow: hidden;
+            }
+            .visitors-bar-fill {
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                border-radius: 999px;
+                background: linear-gradient(180deg, #22c55e, #16a34a);
+                transition: height 0.3s ease-out;
+            }
+            .visitors-bar-label {
+                margin-top: 3px;
+                text-align: center;
+                font-size: 0.7rem;
+                color: #9ca3af;
+            }
+            @media (max-width: 640px) {
+                .analytics-card {
+                    padding: 16px 16px 14px 16px;
+                }
+                .analytics-header {
+                    flex-direction: column;
+                    align-items: flex-start;
+                }
+            }
             .chatbot-inquiries {
                 padding: 20px;
                 max-width: 100%;
@@ -401,12 +782,395 @@ export async function loadChatbotData() {
                 color: #666;
                 font-style: italic;
             }
+            .chatbot-inquiries-header {
+                display:flex;
+                justify-content:space-between;
+                align-items:center;
+                gap:12px;
+                margin-bottom:10px;
+            }
+            .chatbot-inquiries-actions {
+                display:flex;
+                gap:8px;
+            }
+            .chatbot-inquiries-actions button {
+                padding:6px 10px;
+                border-radius:999px;
+                border:1px solid #e5e7eb;
+                background:#f9fafb;
+                font-size:0.8rem;
+                cursor:pointer;
+            }
+            .chatbot-inquiries-actions button:hover {
+                background:#e0f2fe;
+                border-color:#bfdbfe;
+            }
+            .chat-view-btn {
+                padding: 6px 10px;
+                border-radius: 999px;
+                border: 1px solid #e5e7eb;
+                background: #f9fafb;
+                font-size: 0.8rem;
+                color: #1f2937;
+                cursor: pointer;
+                transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+                white-space: nowrap;
+            }
+            .chat-view-btn:hover {
+                background: #e0f2fe;
+                border-color: #bfdbfe;
+                color: #0f172a;
+            }
+            .chat-convo-backdrop {
+                position: fixed;
+                inset: 0;
+                background: rgba(15,23,42,0.45);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1200;
+            }
+            .chat-convo-modal {
+                width: 100%;
+                max-width: 720px;
+                background: #ffffff;
+                border-radius: 16px;
+                box-shadow: 0 25px 80px rgba(15,23,42,0.4);
+                border: 1px solid rgba(148,163,184,0.5);
+                padding: 16px 18px 18px 18px;
+            }
+            .chat-convo-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                margin-bottom: 8px;
+            }
+            .chat-convo-header h3 {
+                margin: 0;
+                font-size: 1.05rem;
+                font-weight: 600;
+                color: #0f172a;
+            }
+            .chat-convo-close {
+                border-radius: 999px;
+                border: 1px solid #e5e7eb;
+                background: #f9fafb;
+                width: 28px;
+                height: 28px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                font-size: 1rem;
+                line-height: 1;
+            }
+            .chat-convo-body {
+                max-height: 420px;
+                overflow-y: auto;
+                padding-top: 4px;
+            }
+            .chat-convo-question {
+                font-size: 0.9rem;
+                color: #374151;
+                margin-bottom: 10px;
+            }
+            .chat-convo-question span {
+                display: inline-block;
+                margin-left: 4px;
+            }
+            .chat-convo-responses {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .chat-convo-loading {
+                font-size: 0.88rem;
+                color: #6b7280;
+            }
+            .chat-convo-empty {
+                font-size: 0.88rem;
+                color: #6b7280;
+            }
+            .chat-convo-entry {
+                padding: 10px 12px;
+                border-radius: 10px;
+                background: #f9fafb;
+                border: 1px solid #e5e7eb;
+            }
+            .chat-convo-meta {
+                font-size: 0.78rem;
+                color: #6b7280;
+                margin-bottom: 4px;
+            }
+            .chat-convo-text {
+                font-size: 0.9rem;
+                color: #111827;
+                white-space: pre-wrap;
+            }
         `;
         document.head.appendChild(style);
     } catch (error) {
         console.error('Error loading chatbot data:', error);
         container.innerHTML = `<div class="error-message">Error loading chatbot inquiries: ${escapeHtml(error.message)}</div>`;
     }
+}
+
+// Real-time analytics: total inquiries and per-category counts with time filters
+export function initChatbotAnalyticsRealtime() {
+    const analyticsEl = document.getElementById('chatbot-analytics');
+    if (!analyticsEl) return;
+
+    if (!auth.currentUser) {
+        analyticsEl.innerHTML = '<div class="auth-message"><p>Please log in to view chatbot analytics.</p></div>';
+        return;
+    }
+
+    const inquiriesQuery = query(
+        collection(db, 'chatbot'),
+        orderBy('timestamp', 'desc'),
+        limit(500)
+    );
+
+    let cachedEntries = [];
+    let currentRange = 'all'; // 'all' | '24h' | '7d'
+
+    const render = () => {
+        if (!cachedEntries.length) {
+            analyticsEl.innerHTML = '<div class="no-data">No chatbot inquiries yet.</div>';
+            return;
+        }
+
+        const now = Date.now();
+        const ms24h = 24 * 60 * 60 * 1000;
+        const ms7d = 7 * ms24h;
+
+        let filtered = cachedEntries;
+        if (currentRange === '24h') {
+            filtered = cachedEntries.filter(e => now - e.timeMs <= ms24h);
+        } else if (currentRange === '7d') {
+            filtered = cachedEntries.filter(e => now - e.timeMs <= ms7d);
+        }
+
+        if (!filtered.length) {
+            analyticsEl.innerHTML = '<div class="no-data">No inquiries in this time range.</div>';
+            return;
+        }
+
+        const countsByCategory = {};
+        let total = 0;
+
+        filtered.forEach((entry) => {
+            const cat = entry.category || 'general';
+            countsByCategory[cat] = (countsByCategory[cat] || 0) + 1;
+            total += 1;
+        });
+
+        const sortedCategories = Object.entries(countsByCategory).sort((a, b) => b[1] - a[1]);
+
+        analyticsEl.innerHTML = `
+            <div class="analytics-card">
+                <div class="analytics-header">
+                    <h2>Chatbot Analytics</h2>
+                    <p class="analytics-subtitle">Real-time summary of customer inquiries by category</p>
+                </div>
+                <div class="analytics-metric">
+                    <span class="analytics-label">Total inquiries</span>
+                    <span class="analytics-value">${total}</span>
+                </div>
+                <div class="analytics-filters">
+                    <button type="button" class="analytics-filter ${currentRange === 'all' ? 'is-active' : ''}" data-range="all">All (last 500)</button>
+                    <button type="button" class="analytics-filter ${currentRange === '24h' ? 'is-active' : ''}" data-range="24h">Last 24h</button>
+                    <button type="button" class="analytics-filter ${currentRange === '7d' ? 'is-active' : ''}" data-range="7d">Last 7 days</button>
+                </div>
+                <div class="analytics-categories">
+                    ${sortedCategories.map(([cat, count]) => {
+                        const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                        const safeCat = escapeHtml(cat);
+                        return `
+                            <div class="analytics-category-row">
+                                <div class="analytics-category-header">
+                                    <span class="analytics-category-name">${safeCat}</span>
+                                    <span class="analytics-category-count">${count} (${pct}%)</span>
+                                </div>
+                                <div class="analytics-bar">
+                                    <div class="analytics-bar-fill analytics-bar-fill--${safeCat}" style="width: ${pct}%;"></div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+
+        const buttons = analyticsEl.querySelectorAll('.analytics-filter');
+        buttons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const range = btn.getAttribute('data-range') || 'all';
+                currentRange = range;
+                render();
+            });
+        });
+    };
+
+    onSnapshot(
+        inquiriesQuery,
+        (snap) => {
+            if (snap.empty) {
+                cachedEntries = [];
+                render();
+                return;
+            }
+
+            cachedEntries = [];
+            snap.forEach((doc) => {
+                const data = doc.data() || {};
+                const ts = data.timestamp?.toDate ? data.timestamp.toDate() : new Date();
+                cachedEntries.push({
+                    category: data.category || 'general',
+                    timeMs: ts.getTime()
+                });
+            });
+
+            render();
+        },
+        (error) => {
+            console.error('Error loading chatbot analytics:', error);
+            analyticsEl.innerHTML = `<div class="error-message">Error loading chatbot analytics: ${escapeHtml(error.message)}</div>`;
+        }
+    );
+}
+
+// Real-time account analytics: total and active admins/employees
+export function initAccountAnalyticsRealtime() {
+    const el = document.getElementById('account-analytics');
+    if (!el) return;
+
+    if (!auth.currentUser) {
+        el.innerHTML = '<div class="auth-message"><p>Please log in to view account analytics.</p></div>';
+        return;
+    }
+
+    const usersCol = collection(db, 'users');
+    const visitsQuery = query(
+        collection(db, 'visits'),
+        orderBy('ts', 'desc'),
+        limit(500)
+    );
+
+    const rolesByUid = {};
+    const lastVisitByUid = {};
+    let recentVisits = []; // raw visits with timestamp (ms) for chart
+    const ACTIVE_MS = 15 * 60 * 1000; // 15 minutes
+
+    const renderAccounts = () => {
+        const now = Date.now();
+        let totalAdmins = 0;
+        let totalEmployees = 0;
+        let activeAdmins = 0;
+        let activeEmployees = 0;
+
+        Object.entries(rolesByUid).forEach(([uid, role]) => {
+            if (role === 'admin') totalAdmins += 1;
+            else totalEmployees += 1;
+
+            const last = lastVisitByUid[uid];
+            if (!last) return;
+
+            const isActive = now - last <= ACTIVE_MS;
+            if (!isActive) return;
+
+            if (role === 'admin') activeAdmins += 1;
+            else activeEmployees += 1;
+        });
+
+        el.innerHTML = `
+            <div class="analytics-card">
+                <div class="analytics-header">
+                    <h2>Account Overview</h2>
+                    <p class="analytics-subtitle">Real-time snapshot of admin and employee accounts</p>
+                </div>
+                <div class="analytics-users-grid">
+                    <div class="analytics-user-card">
+                        <div class="analytics-user-label">Total admins</div>
+                        <div class="analytics-user-value">${totalAdmins}</div>
+                        <div class="analytics-user-sub">All admin accounts in the system</div>
+                    </div>
+                    <div class="analytics-user-card">
+                        <div class="analytics-user-label">Total employees</div>
+                        <div class="analytics-user-value">${totalEmployees}</div>
+                        <div class="analytics-user-sub">All employee accounts in the system</div>
+                    </div>
+                    <div class="analytics-user-card">
+                        <div class="analytics-user-label">Active admins</div>
+                        <div class="analytics-user-value">${activeAdmins}</div>
+                        <div class="analytics-user-sub">Seen in the last 15 minutes</div>
+                    </div>
+                    <div class="analytics-user-card">
+                        <div class="analytics-user-label">Active employees</div>
+                        <div class="analytics-user-value">${activeEmployees}</div>
+                        <div class="analytics-user-sub">Seen in the last 15 minutes</div>
+                    </div>
+                </div>
+                <p class="analytics-footnote">Active users are counted based on recent activity across the system (last 15 minutes).</p>
+            </div>
+        `;
+    };
+
+    const unsubUsers = onSnapshot(
+        usersCol,
+        (snap) => {
+            // reset map
+            Object.keys(rolesByUid).forEach(k => delete rolesByUid[k]);
+            snap.forEach((docSnap) => {
+                const data = docSnap.data() || {};
+                const role = data.role || 'employee';
+                rolesByUid[docSnap.id] = role;
+            });
+            renderAccounts();
+        },
+        (error) => {
+            console.error('Error loading users for account analytics:', error);
+            el.innerHTML = `<div class="error-message">Error loading account analytics: ${escapeHtml(error.message)}</div>`;
+        }
+    );
+
+    const unsubVisits = onSnapshot(
+        visitsQuery,
+        (snap) => {
+            // keep latest visit timestamp per uid (for active users)
+            // and all visits (including anonymous) for the chart
+            Object.keys(lastVisitByUid).forEach(k => delete lastVisitByUid[k]);
+            recentVisits = [];
+            snap.forEach((d) => {
+                const v = d.data() || {};
+                if (!v.ts) return;
+                const tsDate = v.ts.toDate ? v.ts.toDate() : null;
+                if (!tsDate) return;
+                const ms = tsDate.getTime();
+
+                const uid = v.uid;
+                if (uid) {
+                    if (!lastVisitByUid[uid] || ms > lastVisitByUid[uid]) {
+                        lastVisitByUid[uid] = ms;
+                    }
+                }
+
+                // Always count visit in chart, even without uid (public visitors)
+                recentVisits.push({ timeMs: ms });
+            });
+            renderAccounts();
+        },
+        (error) => {
+            console.error('Error loading visits for account analytics:', error);
+            // Do not overwrite card completely; just log the error.
+        }
+    );
+
+    return () => {
+        if (typeof unsubUsers === 'function') unsubUsers();
+        if (typeof unsubVisits === 'function') unsubVisits();
+    };
 }
 
 // Helper function to escape HTML special characters

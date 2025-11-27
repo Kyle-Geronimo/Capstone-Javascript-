@@ -33,10 +33,19 @@ function initializeAuthState() {
             if (authContainer && authButtons) {
                 authButtons.style.display = 'none';
             }
-            
-            // If on login page, redirect to home
+
+            // If on public home page while logged in, send user to staff/internal home (index2.html)
+            const path = window.location.pathname || '';
+            const isPublicHome = path === '/' || path === '' || path.endsWith('/index.html') || path.endsWith('index.html');
+            const isStaffHome = path.endsWith('/index2.html') || path.endsWith('index2.html');
+            if (isPublicHome && !isStaffHome) {
+                window.location.href = '/index2.html';
+                return;
+            }
+
+            // If on login page, redirect staff to internal home (index2.html)
             if (window.location.pathname.includes('login.html')) {
-                window.location.href = '../index.html';
+                window.location.href = '../index2.html';
             }
         } else {
             // User is logged out
@@ -80,7 +89,8 @@ function initializeAuthState() {
 }
 
 // Create new account request
-export async function signup(email, password, role = 'employee', username = '') {
+// Optional pin: for admin signups, the UI may collect a 6-digit PIN and pass it here.
+export async function signup(email, password, role = 'employee', username = '', pin = null) {
     try {
         // Store request in Firestore
         const reqRef = await addDoc(collection(db, 'accountRequests'), {
@@ -88,6 +98,7 @@ export async function signup(email, password, role = 'employee', username = '') 
             password, // warning: store securely in production
             role,
             username: username || email.split('@')[0],
+            pin: pin || null,
             status: 'pending',
             createdAt: serverTimestamp()
         });

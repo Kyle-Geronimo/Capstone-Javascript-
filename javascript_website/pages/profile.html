@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>HotelLink - Profile</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../image/logo/HTLogo.png">
   <link rel="stylesheet" href="../css/styles.css">
   <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
   <script>window.API_BASE = 'https://mariners-hotellink.com';</script>
@@ -15,7 +16,7 @@
     <div class="container">
       <h1>HotelLink</h1>
       <nav>
-        <a href="../index.html" class="nav-btn">Home</a>
+        <a href="../index2.html" class="nav-btn">Home</a>
         <a href="chatbot.html" class="nav-btn restricted">Chatbot Data</a>
         <a href="admin.html" class="nav-btn restricted admin-only">Admin</a>
         <a href="payroll.html" class="nav-btn restricted admin-only">Payroll</a>
@@ -246,6 +247,24 @@
         const { addDoc, collection, query, where, onSnapshot, serverTimestamp, doc, getDoc, getDocs } =
           await import('https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js');
 
+        // Role-based guard: only admins can see payroll on profile
+        try {
+          const currentUserForRole = auth.currentUser;
+          if (currentUserForRole) {
+            const uRefRole = doc(db, 'users', currentUserForRole.uid);
+            const uSnapRole = await getDoc(uRefRole);
+            const uDataRole = uSnapRole.exists() ? uSnapRole.data() : {};
+            if (uDataRole && uDataRole.role && uDataRole.role !== 'admin') {
+              const payrollSection = document.getElementById('payroll-info');
+              if (payrollSection) payrollSection.style.display = 'none';
+              // Do not initialize any payroll listeners or requests for non-admins
+              return;
+            }
+          }
+        } catch (roleErr) {
+          console.error('Error checking role for payroll visibility on profile:', roleErr);
+        }
+
         // Elements
         const requestBtn = document.getElementById('loadPayroll');
         if (!requestBtn) {
@@ -253,6 +272,49 @@
           return;
         }
         requestBtn.textContent = 'Request Payroll View';
+
+        // If this user already has payrollViewAllowed === true, auto-load their latest payroll run
+        try {
+          const currentUser = auth.currentUser;
+          if (currentUser && fetchMostRecentPayrollRun) {
+            const uRef = doc(db, 'users', currentUser.uid);
+            const uSnap = await getDoc(uRef);
+            const uData = uSnap.exists() ? uSnap.data() : {};
+            if (uData && uData.payrollViewAllowed) {
+              // Enforce 24-hour visibility window based on payrollViewAllowedAt
+              const allowedAt = uData.payrollViewAllowedAt || null;
+              let withinWindow = false;
+              if (allowedAt) {
+                let ts = null;
+                try {
+                  ts = typeof allowedAt.toMillis === 'function'
+                    ? allowedAt.toMillis()
+                    : new Date(allowedAt).getTime();
+                } catch (_) {
+                  ts = null;
+                }
+                if (ts && Number.isFinite(ts)) {
+                  const ageMs = Date.now() - ts;
+                  const windowMs = 24 * 60 * 60 * 1000; // 24 hours
+                  withinWindow = ageMs >= 0 && ageMs <= windowMs;
+                }
+              }
+
+              if (withinWindow) {
+                try {
+                  const { ratesMap, runMeta, linesMap } = await fetchMostRecentPayrollRun();
+                  await renderPayrollForUser(currentUser.uid, linesMap, runMeta);
+                } catch (autoErr) {
+                  console.error('Auto-load payroll failed:', autoErr);
+                }
+              } else {
+                console.log('payrollViewAllowed flag exists but is outside the 24-hour window; not auto-loading payroll.');
+              }
+            }
+          }
+        } catch (flagErr) {
+          console.error('Error checking payrollViewAllowed flag:', flagErr);
+        }
 
         // Click handler: create request doc
         requestBtn.addEventListener('click', async () => {
@@ -308,39 +370,7 @@
                     return;
                   }
                   const { ratesMap, runMeta, linesMap } = await fetchMostRecentPayrollRun();
-                  // Support both Map and plain object for linesMap
-                  const hasLine = linesMap && (typeof linesMap.has === 'function' ? linesMap.has(user.uid) : (linesMap[user.uid] !== undefined));
-                  const line = hasLine ? (typeof linesMap.get === 'function' ? linesMap.get(user.uid) : linesMap[user.uid]) : null;
-
-                  if (line) {
-                    // fill UI fields (guarded)
-                    if (line.basic !== undefined) document.getElementById('basicPay').textContent = formatCurrency(line.basic);
-                    if (line.otAmount !== undefined) document.getElementById('otAmount').textContent = formatCurrency(line.otAmount);
-                    if (line.gross !== undefined) document.getElementById('grossPay').textContent = formatCurrency(line.gross);
-                    if (line.net !== undefined) document.getElementById('netPay').textContent = formatCurrency(line.net);
-                    if (line.sssEmployee !== undefined) document.getElementById('sssEmployee').textContent = formatCurrency(line.sssEmployee);
-                    if (line.philhealthEmployee !== undefined) document.getElementById('philhealthEmployee').textContent = formatCurrency(line.philhealthEmployee);
-                    if (line.pagibigEmployee !== undefined) document.getElementById('pagibigEmployee').textContent = formatCurrency(line.pagibigEmployee);
-                    if (line.morningShiftDays !== undefined) document.getElementById('morningDays').textContent = line.morningShiftDays;
-                    if (line.midShiftDays !== undefined) document.getElementById('midDays').textContent = line.midShiftDays;
-                    if (line.nightShiftDays !== undefined) document.getElementById('nightDays').textContent = line.nightShiftDays;
-                    if (line.otHours !== undefined) document.getElementById('otHours').textContent = line.otHours;
-
-                    // show run meta banner (create or update)
-                    const metaElId = 'payrollRunMetaBanner';
-                    let metaEl = document.getElementById(metaElId);
-                    const payrollInfo = document.getElementById('payroll-info');
-                    if (!metaEl) {
-                      metaEl = document.createElement('div');
-                      metaEl.id = metaElId;
-                      metaEl.className = 'payroll-meta';
-                      if (payrollInfo) payrollInfo.insertBefore(metaEl, document.getElementById('payrollDetails'));
-                    }
-                    const periodText = runMeta && runMeta.periodStart ? `${escapeHtml(runMeta.periodStart)} → ${escapeHtml(runMeta.periodEnd)}` : 'Most recent saved run';
-                    metaEl.innerHTML = `<strong>Payroll run shown:</strong> ${periodText} ${runMeta && runMeta.note ? `<div class="meta-note">${escapeHtml(runMeta.note)}</div>` : ''}`;
-                  } else {
-                    alert('Your payroll view request was approved but there is no saved payroll line for you in the most recent run.');
-                  }
+                  await renderPayrollForUser(user.uid, linesMap, runMeta);
                 } catch (e) {
                   console.error('Error loading saved payroll run after approval', e);
                   alert('Failed to load saved payroll run.');
@@ -359,6 +389,65 @@
         })();
 
         // Helpers
+        async function renderPayrollForUser(userId, linesMap, runMeta) {
+          if (!linesMap) return;
+          const hasLine =
+            typeof linesMap.has === 'function'
+              ? linesMap.has(userId)
+              : (linesMap[userId] !== undefined);
+          const line = hasLine
+            ? (typeof linesMap.get === 'function' ? linesMap.get(userId) : linesMap[userId])
+            : null;
+
+          if (!line) {
+            alert('There is no saved payroll line for you in the most recent run.');
+            return;
+          }
+
+          const basicFromGross = (line.grossPay !== undefined) ? line.grossPay : undefined;
+          const gross = (line.grossPay !== undefined) ? line.grossPay : line.gross;
+          const net = (line.netPay !== undefined) ? line.netPay : line.net;
+
+          if (basicFromGross !== undefined) document.getElementById('basicPay').textContent = formatCurrency(basicFromGross);
+
+          // Derive OT amount if not explicitly stored: ratePerDay / 8 * otHours
+          let otAmountVal = line.otAmount;
+          if (otAmountVal === undefined && line.otHours !== undefined && line.ratePerDay !== undefined) {
+            const ratePerHour = Number(line.ratePerDay) / 8;
+            otAmountVal = ratePerHour * Number(line.otHours || 0);
+          }
+          if (otAmountVal !== undefined) document.getElementById('otAmount').textContent = formatCurrency(otAmountVal);
+
+          if (gross !== undefined) document.getElementById('grossPay').textContent = formatCurrency(gross);
+          if (net !== undefined) document.getElementById('netPay').textContent = formatCurrency(net);
+
+          // Statutory contributions: use employee-share fields from payroll lines
+          if (line.sss !== undefined) document.getElementById('sssEmployee').textContent = formatCurrency(line.sss);
+          if (line.philhealth !== undefined) document.getElementById('philhealthEmployee').textContent = formatCurrency(line.philhealth);
+          if (line.pagibig !== undefined) document.getElementById('pagibigEmployee').textContent = formatCurrency(line.pagibig);
+
+          // Shift/day breakdowns will only populate if present on the line
+          if (line.morningShiftDays !== undefined) document.getElementById('morningDays').textContent = line.morningShiftDays;
+          if (line.midShiftDays !== undefined) document.getElementById('midDays').textContent = line.midShiftDays;
+          if (line.nightShiftDays !== undefined) document.getElementById('nightDays').textContent = line.nightShiftDays;
+          if (line.otHours !== undefined) document.getElementById('otHours').textContent = line.otHours;
+
+          // show run meta banner (create or update)
+          const metaElId = 'payrollRunMetaBanner';
+          let metaEl = document.getElementById(metaElId);
+          const payrollInfo = document.getElementById('payroll-info');
+          if (!metaEl) {
+            metaEl = document.createElement('div');
+            metaEl.id = metaElId;
+            metaEl.className = 'payroll-meta';
+            if (payrollInfo) payrollInfo.insertBefore(metaEl, document.getElementById('payrollDetails'));
+          }
+          const periodText = runMeta && runMeta.periodStart
+            ? `${escapeHtml(runMeta.periodStart)} → ${escapeHtml(runMeta.periodEnd)}`
+            : 'Most recent saved run';
+          metaEl.innerHTML = `<strong>Payroll run shown:</strong> ${periodText} ${runMeta && runMeta.note ? `<div class="meta-note">${escapeHtml(runMeta.note)}</div>` : ''}`;
+        }
+
         function formatCurrency(v) {
           if (v === null || v === undefined || isNaN(Number(v))) return '-';
           return Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });

@@ -6,6 +6,7 @@ const admin = require('firebase-admin');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const path = require('path');
 const fs = require('fs');
+const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -102,8 +103,8 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
 // Middleware
+app.use(cors({ origin: true }));
 app.use(bodyParser.json());
-
 
 // --- Utility: normalize text ---
 function normalizeText(s = '') {
@@ -615,6 +616,76 @@ async function getKnowledgeBase() {
     return '';
   }
 }
+ 
+// --- Web Chat Endpoint (for in-app chatbot widget) ---
+app.post('/chat', async (req, res) => {
+  try {
+    const userMessage = (req.body && req.body.message ? String(req.body.message) : '').trim();
+    const userId = (req.body && req.body.userId ? String(req.body.userId) : 'web');
+
+    if (!userMessage) {
+      return res.status(400).json({ error: 'missing_message' });
+    }
+
+    // Best-effort: save raw question in chatbot collection and keep the doc id
+    let savedQuestionMeta = null;
+    try {
+      savedQuestionMeta = await saveUserQuestion(userMessage);
+    } catch (err) {
+      console.warn('WEBCHAT: failed to save question (non-fatal):', err.message || err);
+    }
+
+    // Build knowledge-base context
+    let knowledgeBase = await getKnowledgeBase();
+    const MAX_CHARS = 15000;
+    if (knowledgeBase && knowledgeBase.length > MAX_CHARS) {
+      console.warn('WEBCHAT: knowledge base large; truncating.');
+      knowledgeBase = knowledgeBase.slice(0, MAX_CHARS) + '\n\n[TRUNCATED]';
+    }
+
+    const prompt = `
+You are a helpful hotel reservation assistant for Mariners Hotel. Use ONLY the CONTEXT INFORMATION below to answer the user's question.
+If the exact fact is not in the context, say "I don't have that information in my context" but still try to be polite and helpful.
+
+CONTEXT INFORMATION:
+${knowledgeBase || 'No information available.'}
+
+USER QUESTION:
+${userMessage}
+    `.trim();
+
+    console.log('WEBCHAT: prompt length', prompt.length);
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let botReply = (response && typeof response.text === 'function') ? response.text() : (response?.output?.text ?? '');
+    botReply = (botReply || '').trim();
+
+    if (!botReply) {
+      console.warn('WEBCHAT: empty model response, using fallback message.');
+      botReply = "I'm sorry, I couldn't find the information you requested in my context. Could you try rephrasing or asking about another detail?";
+    }
+
+    // Try to attach the bot reply back to the chatbot document for this question
+    if (savedQuestionMeta && savedQuestionMeta.id) {
+      try {
+        await db.collection('chatbot').doc(savedQuestionMeta.id).set({ answer: botReply }, { merge: true });
+      } catch (err) {
+        console.warn('WEBCHAT: failed to attach answer to chatbot doc (non-fatal):', err.message || err);
+      }
+    }
+
+    try {
+      await logConversation(userId, userMessage, botReply + '\n\n[WEBCHAT]');
+    } catch (err) {
+      console.warn('WEBCHAT: failed to log conversation (non-fatal):', err.message || err);
+    }
+
+    return res.json({ reply: botReply });
+  } catch (error) {
+    console.error('❌ WEBCHAT: error handling /chat:', error);
+    return res.status(500).json({ error: 'chat_failed', message: error.message || String(error) });
+  }
+});
 
 
 // --- Helper: Send Message to Facebook Messenger ---
@@ -657,17 +728,10 @@ async function saveUserQuestion(questionText) {
   const qTrim = questionText.trim();
 
   try {
-    // 1) Avoid exact-duplicate entries (optional)
-    const dup = await db.collection('chatbot').where('question', '==', qTrim).limit(1).get();
-    if (!dup.empty) {
-      console.log('INFO: question already exists in chatbot collection; skipping insert.');
-      return { skipped: true };
-    }
-
-    // 2) Categorize the question (try model classifier, fall back to rule-based)
+    // Categorize the question (try model classifier, fall back to rule-based)
     const category = (await categorizeQuestion(qTrim)) || 'general';
 
-    // 3) Write to Firestore
+    // Always write a fresh document so each interaction has its own record
     const docRef = await db.collection('chatbot').add({
       category,
       question: qTrim,

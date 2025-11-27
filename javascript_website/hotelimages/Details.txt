@@ -1,0 +1,49 @@
+Generator: [QR Dashboard Page]
+Be able to chose Employee (from users database) excluding ones that already has a QR, Role which is auto filled by users database, Department which has 3 option (Bicotels Hotel, D'Mariners Inn Hotel, Wennrod Hotel), Shift which has 3 options (Morning Shift 6 am to 2pm, Mid Shift 2 pm to 10 pm, Night Shift 10 pm to 6 am). This will be saved in users database.
+
+Scanner: [QR Dashboard Page]
+Be able to choose time in and time out, camera, upload file, access a camera and state status and debug log. once its used it will use attendance database to store data with a few conditions:
+
+for attendance 30 min past the starting of the shift so 6 to 6:30 morning shift, 2pm to 2:30pm mid shift, 10 pm to 10:30 pm night shift will be considered late if they are late by an hour so like 7 am morning shift, 3pm mid shift and 11 pm night shift they will be considered as absent. Consider all this based on the user and what shift they are assigned to, when doing payrolls stuff. Additionally, on scanner when recording attendance if someone who has the morning shift time in earlier  of 6 am or  10 min later 6 am its still gonna be recorded as 6 am flat, for mid shift time in before 2 pm or after 10 min of 2pm will be timed in as 2pm flat, for night shift time in before 10 pm or 10 min after 10 pm its gonna be recorded as 10 pm flat.
+
+Calendar: [Payroll Page]
+Be able to pick days for both Holiday and Special Non Working Holiday, and chosen days will be highlighted automatically every year unless removed. This will be stored in payroll_settings/holidays.
+
+Tabulation Import: [Payroll Page] 
+Can read Tabulation excel/xlsx file, be able to preview collected data for confirmation and import it in database config/sssContributionTable.
+
+Payroll Table: [Payroll Page]
+Has Period Start and Period End, Import Tabulation, reload Payroll Table, Save Payroll Run. this table will use these databases (config/sssContributionTable, attendance, users, payroll_settings/holidays).
+Has 25 Column:
+
+# - just the number of rows in the column.
+Username - username of users from the users database.
+Rate/Day - Manually added value, loads from the recently saved payrolls database.
+Days - Manually added value, loads from the recently saved payrolls database.
+Hours (auto) - gets data from the attendance database and calculates how many hours based on attendance made and the tables Period Start and Period End, loads from the recently saved payrolls database.
+ND hrs - gets data from the attendance database and calculates how many hours based on attendance made and the tables Period Start and Period End with the condition that the shift of user in users database is night shift, loads from the recently saved payrolls database.
+ND-on-OT hrs - gets data from the attendance database and calculates how many hours based on attendance made and the tables Period Start and Period End with the condition that the shift of user in users database is mid shift but went over 10 pm, loads from the recently saved payrolls database.
+OT hrs - gets data from the attendance database and calculates how many hours based on attendance made and the tables Period Start and Period End with the condition that if a user with morning shift timeout 1:59pm or night shift timeout 5:59am times out passed those times it will count to OT hrs, loads from the recently saved payrolls database.
+RegHol hrs  - gets data from the attendance database and calculates how many hours based on attendance made and the tables Period Start and Period End on the condition that if that days date is inline with the Regular Holiday from the payroll_settings/holidays database, loads from the recently saved payrolls database.
+SpecHol hrs  - gets data from the attendance database and calculates how many hours based on attendance made and the tables Period Start and Period End on the condition that if that days date is inline with the Special Holiday from the payroll_settings/holidays database, loads from the recently saved payrolls database.
+SSS (emp) - gets data from Gross and finds where it falls in range of the Tabulation imported into config/sssContributionTable database, so where ever the gross amount lands on the Range of Compensation column it will use that row to find Employee Total to use that value and put in SSS (emp) payroll table, loads from the recently saved payrolls database.
+PhilHealth (emp) - 2.5% of the total gross will be its value, loads from the recently saved payrolls database.
+Pag-IBIG (emp) - Manually inputted Value but the whole column will follow that inputted value, loads from the recently saved payrolls database.
+ST. PETER - Manually inputted Value, loads from the recently saved payrolls database.
+SSS Salary Loan - Manually inputted Value, loads from the recently saved payrolls database.
+SSS Calamity Loan - Manually inputted Value, loads from the recently saved payrolls database.
+HDMF Salary Loan - Manually inputted Value, loads from the recently saved payrolls database.
+HDMF Calamity Loan - Manually inputted Value, loads from the recently saved payrolls database.
+Cash Advance / Credit - Manually inputted Value, loads from the recently saved payrolls database.
+UT / LATE (hrs) - gets data from the attendance database and calculates how many hours based on attendance made and the tables Period Start and Period End with the condition that if a user with morning shift, mid shift or night shift timein 30 min of their scheduled start will be recorded as late/ut hrs, loads from the recently saved payrolls database.
+UT / LATE AMOUNT - Manually inputted Value, loads from the recently saved payrolls database.
+Gross (auto) - Rate/Day * Days, loads from the recently saved payrolls database.
+Deductions (total auto) - SSS (emp) + PhilHealth (emp) + Pag-IBIG (emp) + ST. PETER + SSS Salary Loan + SSS Calamity Loan + HDMF Salary Loan + HDMF Calamity Loan + Cash Advance / Credit + UT / LATE (hrs) + UT / LATE AMOUNT is = to Gross, loads from the recently saved payrolls database.
+Net (auto) Total Gross - Deduction = Net
+Note - Manually inputted Value, loads from the recently saved payrolls database.
+
+Payroll Panel: [Profile Page]
+Has a payroll table specifically to contain that users payroll record after using the View Payroll Request button and be approved by an admin in admin page but with the condition that the payroll record will not be visible again after 24 hours. uses the payrollViewRequests database.
+
+Payroll View Requests: [Admin]
+has a payroll request list (2 column) that will load users from payrollViewRequests for either approval or denial.
