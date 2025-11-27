@@ -683,6 +683,7 @@ async function initLivePayroll() {
         hdmfSalaryLoan: Number((savedLine && savedLine['hdmf salary loan']) || 0),
         hdmfCalamityLoan: Number((savedLine && savedLine['hdmf calamity loan']) || 0),
         cashAdvance: Number((savedLine && savedLine.cashAdvance) || 0),
+        credit: Number((savedLine && savedLine.credit) || 0),
         utLateHours: Number((savedLine && savedLine['ut/late']) || 0),
         utLateAmount: Number((savedLine && savedLine['ut/late amount']) || 0),
         note: seededNote,
@@ -1317,10 +1318,10 @@ function formatDateForInput(v) {
   if (v instanceof Date) {
     return isNaN(v.getTime()) ? '' : v.toISOString().slice(0,10);
   }
+  // Fallback when type is not recognized
   return '';
 }
 
-// RENDER: every column editable; automated values shown as placeholder
 function renderTable() {
   if (!payrollBody) return;
   payrollBody.innerHTML = '';
@@ -1358,25 +1359,25 @@ function renderTable() {
 
       <td><input class="input-small" data-field="ratePerDay" data-id="${r.userId}" value="${escapeHtml(val('ratePerDay'))}" placeholder="${escapeHtml(fmt(r.ratePerDay || r._calc?.ratePerDay || ''))}" /></td>
 
-      <!-- Days: computed from attendance (8h=1 day for morning/mid, 9h=1 day for night), read-only -->
-      <td><input class="input-small" data-field="daysWorked" data-id="${r.userId}" value="${escapeHtml(fmt(r.daysWorked || auto.daysWorked || ''))}" placeholder="${escapeHtml(fmt(r.daysWorked || auto.daysWorked || ''))}" readonly /></td>
+      <!-- Days: default from attendance but now editable by admin -->
+      <td><input class="input-small" data-field="daysWorked" data-id="${r.userId}" value="${escapeHtml(fmt(r.daysWorked || auto.daysWorked || ''))}" placeholder="${escapeHtml(fmt(r.daysWorked || auto.daysWorked || ''))}" /></td>
 
-      <td><input class="input-small" data-field="hoursWorked" data-id="${r.userId}" value="${escapeHtml(fmt(r.hoursWorked || auto.hoursWorked || ''))}" placeholder="${escapeHtml(fmt(r.hoursWorked || auto.hoursWorked || ''))}" readonly /></td>
+      <td><input class="input-small" data-field="hoursWorked" data-id="${r.userId}" value="${escapeHtml(fmt(r.hoursWorked || auto.hoursWorked || ''))}" placeholder="${escapeHtml(fmt(r.hoursWorked || auto.hoursWorked || ''))}" /></td>
 
-      <td><input class="input-small" data-field="ndHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.ndHours || auto.ndHours || ''))}" placeholder="${escapeHtml(fmt(r.ndHours || auto.ndHours || ''))}" readonly /></td>
+      <td><input class="input-small" data-field="ndHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.ndHours || auto.ndHours || ''))}" placeholder="${escapeHtml(fmt(r.ndHours || auto.ndHours || ''))}" /></td>
 
-      <td><input class="input-small" data-field="ndOtHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.ndOtHours || auto.ndOtHours || ''))}" placeholder="${escapeHtml(fmt(r.ndOtHours || auto.ndOtHours || ''))}" readonly /></td>
+      <td><input class="input-small" data-field="ndOtHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.ndOtHours || auto.ndOtHours || ''))}" placeholder="${escapeHtml(fmt(r.ndOtHours || auto.ndOtHours || ''))}" /></td>
 
-      <td><input class="input-small" data-field="otHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.otHours || auto.otHours || ''))}" placeholder="${escapeHtml(fmt(r.otHours || auto.otHours || ''))}" readonly /></td>
+      <td><input class="input-small" data-field="otHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.otHours || auto.otHours || ''))}" placeholder="${escapeHtml(fmt(r.otHours || auto.otHours || ''))}" /></td>
 
-      <td><input class="input-small" data-field="regularHolidayHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.regularHolidayHours || auto.regHolidayHours || ''))}" placeholder="${escapeHtml(fmt(r.regularHolidayHours || auto.regHolidayHours || ''))}" readonly /></td>
+      <td><input class="input-small" data-field="regularHolidayHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.regularHolidayHours || auto.regHolidayHours || ''))}" placeholder="${escapeHtml(fmt(r.regularHolidayHours || auto.regHolidayHours || ''))}" /></td>
 
-      <td><input class="input-small" data-field="specialHolidayHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.specialHolidayHours || auto.specialHolidayHours || ''))}" placeholder="${escapeHtml(fmt(r.specialHolidayHours || auto.specialHolidayHours || ''))}" readonly /></td>
+      <td><input class="input-small" data-field="specialHolidayHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.specialHolidayHours || auto.specialHolidayHours || ''))}" placeholder="${escapeHtml(fmt(r.specialHolidayHours || auto.specialHolidayHours || ''))}" /></td>
 
-      <!-- statutory deductions: automated, read-only -->
-      <td><input class="input-small" data-field="sss" data-id="${r.userId}" value="${escapeHtml(fmt(r.sss ?? ph_sss))}" placeholder="${escapeHtml(fmt(ph_sss))}" readonly /></td>
-      <td><input class="input-small" data-field="philhealth" data-id="${r.userId}" value="${escapeHtml(fmt(r.philhealth ?? ph_phil))}" placeholder="${escapeHtml(fmt(ph_phil))}" readonly /></td>
-      <td><input class="input-small" data-field="pagibig" data-id="${r.userId}" value="${escapeHtml(fmt(r.pagibig ?? ph_pagibig))}" placeholder="${escapeHtml(fmt(ph_pagibig))}" readonly /></td>
+      <!-- statutory deductions: default from automation but now editable overrides -->
+      <td><input class="input-small" data-field="sss" data-id="${r.userId}" value="${escapeHtml(fmt(r.sss ?? ph_sss))}" placeholder="${escapeHtml(fmt(ph_sss))}" /></td>
+      <td><input class="input-small" data-field="philhealth" data-id="${r.userId}" value="${escapeHtml(fmt(r.philhealth ?? ph_phil))}" placeholder="${escapeHtml(fmt(ph_phil))}" /></td>
+      <td><input class="input-small" data-field="pagibig" data-id="${r.userId}" value="${escapeHtml(fmt(r.pagibig ?? ph_pagibig))}" placeholder="${escapeHtml(fmt(ph_pagibig))}" /></td>
       <!-- ST. Peter: manual deduction -->
       <td><input class="input-small" data-field="stPeter" data-id="${r.userId}" value="${escapeHtml(val('stPeter'))}" placeholder="${escapeHtml(fmt(ph_stp))}" /></td>
 
@@ -1386,12 +1387,13 @@ function renderTable() {
       <td><input class="input-small" data-field="hdmfSalaryLoan" data-id="${r.userId}" value="${escapeHtml(val('hdmfSalaryLoan'))}" placeholder="${escapeHtml(fmt(r.hdmfSalaryLoan || '0'))}" /></td>
       <td><input class="input-small" data-field="hdmfCalamityLoan" data-id="${r.userId}" value="${escapeHtml(val('hdmfCalamityLoan'))}" placeholder="${escapeHtml(fmt(r.hdmfCalamityLoan || '0'))}" /></td>
       <td><input class="input-small" data-field="cashAdvance" data-id="${r.userId}" value="${escapeHtml(val('cashAdvance'))}" placeholder="${escapeHtml(fmt(r.cashAdvance || '0'))}" /></td>
+      <td><input class="input-small" data-field="credit" data-id="${r.userId}" value="${escapeHtml(val('credit'))}" placeholder="${escapeHtml(fmt(r.credit || '0'))}" /></td>
 
-      <!-- UT / Late: automated from attendance -->
-      <td><input class="input-small" data-field="utLateHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.utLateHours || auto.utLateHours || ''))}" placeholder="${escapeHtml(fmt(r.utLateHours || auto.utLateHours || ''))}" readonly /></td>
-      <td><input class="input-small" data-field="utLateAmount" data-id="${r.userId}" value="${escapeHtml(fmt(r.utLateAmount || auto.utLateAmount || ''))}" placeholder="${escapeHtml(fmt(r.utLateAmount || auto.utLateAmount || ''))}" readonly /></td>
+      <!-- UT / Late: default from attendance but editable -->
+      <td><input class="input-small" data-field="utLateHours" data-id="${r.userId}" value="${escapeHtml(fmt(r.utLateHours || auto.utLateHours || ''))}" placeholder="${escapeHtml(fmt(r.utLateHours || auto.utLateHours || ''))}" /></td>
+      <td><input class="input-small" data-field="utLateAmount" data-id="${r.userId}" value="${escapeHtml(fmt(r.utLateAmount || auto.utLateAmount || ''))}" placeholder="${escapeHtml(fmt(r.utLateAmount || auto.utLateAmount || ''))}" /></td>
 
-      <!-- Gross / Deductions / Net: fully automated, read-only -->
+      <!-- Gross / Deductions: fully automated, read-only; Net Pay remains computed-only -->
       <td><input class="input-small" data-field="grossPay" data-id="${r.userId}" value="${escapeHtml(ph_gross)}" placeholder="${escapeHtml(ph_gross)}" readonly /></td>
       <td><input class="input-small" data-field="deductionsTotal" data-id="${r.userId}" value="${escapeHtml(ph_deductions_total)}" placeholder="${escapeHtml(ph_deductions_total)}" readonly /></td>
       <td><input class="input-small" data-field="netPay" data-id="${r.userId}" value="${escapeHtml(ph_net)}" placeholder="${escapeHtml(ph_net)}" readonly /></td>
@@ -1411,8 +1413,13 @@ function renderTable() {
       if (!row) return;
       // numeric fields list
       const numericFields = [
-        // Only these fields are manually editable numeric inputs; all others are automated/read-only
-        'ratePerDay','stPeter','sssSalaryLoan','sssCalamityLoan','hdmfSalaryLoan','hdmfCalamityLoan','cashAdvance'
+        // Editable numeric inputs; gross/deductions/net remain computed-only
+        'ratePerDay',
+        'daysWorked','hoursWorked','ndHours','ndOtHours','otHours',
+        'regularHolidayHours','specialHolidayHours',
+        'sss','philhealth','pagibig','stPeter',
+        'sssSalaryLoan','sssCalamityLoan','hdmfSalaryLoan','hdmfCalamityLoan','cashAdvance','credit',
+        'utLateHours','utLateAmount'
       ];
 
       // store using camelCase UI names; when saving we map to Firestore literal keys

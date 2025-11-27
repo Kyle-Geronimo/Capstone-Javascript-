@@ -297,6 +297,11 @@ export function initializeScanner() {
   let currentMode = 'in'; // 'in' or 'out'
   let html5Qrcode = null;
   let currentCameraId = null;
+  let scanRequested = false;
+  let scanRequestTimeoutId = null;
+  // Local session cache to prevent rapid duplicate scans even if Firestore read fails
+  // Key: `${userId}|${yyyy-mm-dd}` -> { hasTimeIn, hasTimeOut }
+  const sessionAttendanceState = new Map();
 
   function setModeVisuals() {
     const tin = document.getElementById('modeTimeIn');
@@ -387,6 +392,14 @@ export function initializeScanner() {
       await html5Qrcode.stop();
       html5Qrcode.clear();
       html5Qrcode = null;
+      // Reset any pending scan request and animation when camera stops
+      scanRequested = false;
+      if (scanRequestTimeoutId) {
+        clearTimeout(scanRequestTimeoutId);
+        scanRequestTimeoutId = null;
+      }
+      const preview = document.getElementById('cameraPreview');
+      if (preview) preview.classList.remove('scan-anim');
       addStatus('Camera stopped');
     } catch (err) {
       console.error('stop error', err);
@@ -399,6 +412,39 @@ export function initializeScanner() {
     await listCamerasToSelect();
     addStatus('Retried camera enumeration');
   });
+
+  // Snap-style scan: only process a QR after admin clicks Scan QR.
+  const scanBtn = document.getElementById('scanQrBtn');
+  if (scanBtn) {
+    scanBtn.addEventListener('click', () => {
+      if (!html5Qrcode) {
+        addStatus('Start the camera first before scanning.', false);
+        return;
+      }
+
+      // Mark that the next successful detection should be processed.
+      scanRequested = true;
+      addStatus('Scanning for QR... hold steady.', true);
+      addDebug('Scan requested by admin click');
+
+      const preview = document.getElementById('cameraPreview');
+      if (preview) preview.classList.add('scan-anim');
+
+      // Clear any previous timeout and set a new one so a single request
+      // does not stay active forever if no QR is detected.
+      if (scanRequestTimeoutId) {
+        clearTimeout(scanRequestTimeoutId);
+        scanRequestTimeoutId = null;
+      }
+      scanRequestTimeoutId = setTimeout(() => {
+        if (!scanRequested) return;
+        scanRequested = false;
+        const pv = document.getElementById('cameraPreview');
+        if (pv) pv.classList.remove('scan-anim');
+        addStatus('No QR detected for this scan attempt.', false);
+      }, 7000);
+    });
+  }
 
   document.getElementById('uploadQrImage')?.addEventListener('change', async (ev) => {
     const file = ev.target.files?.[0];
@@ -483,13 +529,104 @@ export function initializeScanner() {
   function onScanFailure(error) {
     // optional per-frame failure logs (do not spam)
   }
-  async function onScanSuccess(decodedText, decodedResult) {
+
+  // Show a frozen snapshot overlay and require admin confirmation
+  // before actually processing the decoded QR payload.
+  function showScanConfirmOverlay(decodedText) {
     try {
-      await processDecodedText(decodedText);
+      const preview = document.getElementById('cameraPreview');
+      if (!preview) {
+        addDebug('No cameraPreview element for snapshot overlay; processing QR without snapshot.');
+        processDecodedText(decodedText);
+        return;
+      }
+
+      const video = preview.querySelector('video');
+      if (!video || !video.videoWidth || !video.videoHeight) {
+        addDebug('No active video element for snapshot; processing QR without snapshot.');
+        processDecodedText(decodedText);
+        return;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        addDebug('Failed to get canvas context for snapshot; processing QR without snapshot.');
+        processDecodedText(decodedText);
+        return;
+      }
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/png');
+
+      const overlay = document.createElement('div');
+      overlay.id = 'qr-snapshot-overlay';
+      overlay.innerHTML = `
+        <div class="qr-snapshot-modal">
+          <div class="qr-snapshot-image-wrap">
+            <img src="${dataUrl}" alt="QR snapshot" />
+          </div>
+          <div class="qr-snapshot-actions">
+            <button type="button" class="qr-snapshot-cancel">Cancel</button>
+            <button type="button" class="qr-snapshot-confirm">Confirm</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+
+      const btnCancel = overlay.querySelector('.qr-snapshot-cancel');
+      const btnConfirm = overlay.querySelector('.qr-snapshot-confirm');
+
+      const cleanup = () => {
+        try { overlay.remove(); } catch (_) {}
+      };
+
+      if (btnCancel) {
+        btnCancel.addEventListener('click', () => {
+          addStatus('Scan cancelled. Click Scan QR to try again.', false);
+          cleanup();
+        });
+      }
+
+      if (btnConfirm) {
+        btnConfirm.addEventListener('click', async () => {
+          cleanup();
+          try {
+            await processDecodedText(decodedText);
+          } catch (err) {
+            console.error('onScanSuccess confirm err', err);
+            addStatus('Error processing QR', false);
+          }
+        });
+      }
     } catch (err) {
-      console.error('onScanSuccess err', err);
-      addStatus('Error processing QR', false);
+      console.error('showScanConfirmOverlay error', err);
+      // If anything goes wrong with the overlay, fall back to direct processing
+      processDecodedText(decodedText);
     }
+  }
+
+  async function onScanSuccess(decodedText, decodedResult) {
+    // Do not process continuous detections unless admin explicitly
+    // requested a scan via the Scan QR button.
+    if (!scanRequested) {
+      addDebug('QR detected but no scan was requested; ignoring frame.');
+      return;
+    }
+
+    // This detection fulfills the pending request; clear the flag and
+    // any visual animation before showing the snapshot.
+    scanRequested = false;
+    if (scanRequestTimeoutId) {
+      clearTimeout(scanRequestTimeoutId);
+      scanRequestTimeoutId = null;
+    }
+    const preview = document.getElementById('cameraPreview');
+    if (preview) preview.classList.remove('scan-anim');
+
+    showScanConfirmOverlay(decodedText);
   }
 
   async function processDecodedText(decodedTextOrPayload) {
@@ -575,52 +712,62 @@ export function initializeScanner() {
       }
     }
 
-    // 5) As a last resort, if we decoded an id but found no matching record,
-    //    create a lightweight users document so this QR becomes valid going forward.
-    if (!userDoc && id) {
-      try {
-        const fallbackData = {
-          username: payload.name || null,
-          role: payload.role || 'employee',
-          qrValue: payload.qrValue || id,
-          createdAt: serverTimestamp()
-        };
-        const uref = doc(db, 'users', id);
-        await setDoc(uref, fallbackData, { merge: true });
-        userDoc = { id, ...fallbackData };
-        addDebug(`Created lightweight user record for scanned QR id=${id}`);
-      } catch (e) {
-        console.warn('failed to create fallback user for QR', e);
-        // Even if Firestore write fails (e.g. security rules), still build an
-        // in-memory user so we can record attendance for this id.
-        userDoc = {
-          id,
-          username: payload.name || null,
-          role: payload.role || 'employee',
-          shift: payload.shift || null,
-          qrValue: payload.qrValue || id
-        };
-        addDebug(`Using in-memory user for scanned QR id=${id} (Firestore write failed)`);
-      }
+    // 5) If, after all lookups, there is still no matching record, treat as invalid QR.
+    if (!userDoc) {
+      addStatus('invalid qr code!', false);
+      addDebug(`Rejected QR: no matching user/employee for payload id=${id || '(none)'}`);
+      return;
     }
 
-    if (!userDoc && id) {
-      // Final fallback: in-memory user from id only
-      userDoc = { id, username: null, role: 'employee', shift: null, qrValue: id };
-      addDebug(`Using minimal in-memory user for scanned QR id=${id}`);
+    // Enforce that only admin or employee roles can be used for attendance.
+    const role = (userDoc.role || 'employee').toLowerCase();
+    if (role !== 'admin' && role !== 'employee') {
+      addStatus('invalid qr code!', false);
+      addDebug(`Rejected QR: role "${userDoc.role}" is not permitted for attendance.`);
+      return;
     }
-
-    if (!userDoc) { addStatus('QR not linked to user', false); return; }
 
     const now = new Date();
     const evalRes = evaluateForUser({ shift: userDoc.shift || 'morning' }, now);
 
-    // Enforce: at most one time-in and one time-out per user per calendar day
+    const dayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    const lastInDate = userDoc.lastTimeInDate || null;
+    const lastOutDate = userDoc.lastTimeOutDate || null;
+
     const mode = currentMode === 'in' ? 'time-in' : 'time-out';
+
+    if (mode === 'time-in' && lastInDate === dayKey) {
+      addStatus('This account is already time in for today.', false);
+      addDebug(`User ${userDoc.id} blocked by lastTimeInDate=${lastInDate}`);
+      return;
+    }
+    if (mode === 'time-out' && lastOutDate === dayKey) {
+      addStatus('This account is already time out for today.', false);
+      addDebug(`User ${userDoc.id} blocked by lastTimeOutDate=${lastOutDate}`);
+      return;
+    }
+
+    // Enforce: at most one time-in and one time-out per user per calendar day
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     const startIso = startOfDay.toISOString();
     const endIso = endOfDay.toISOString();
+
+    // --- Fast in-memory guard so multiple scans in the same browser session
+    //     do not create duplicates even when Firestore checks fail.
+    const sessKey = `${userDoc.id}|${dayKey}`;
+    const sess = sessionAttendanceState.get(sessKey) || { hasTimeIn: false, hasTimeOut: false };
+    if (mode === 'time-in' && sess.hasTimeIn) {
+      addStatus('This account is already time in for today.', false);
+      addDebug(`Session-blocked duplicate time-in for ${userDoc.id} on ${dayKey}`);
+      return;
+    }
+    if (mode === 'time-out' && sess.hasTimeOut) {
+      addStatus('This account is already time out for today.', false);
+      addDebug(`Session-blocked duplicate time-out for ${userDoc.id} on ${dayKey}`);
+      return;
+    }
 
     try {
       const todayQ = query(
@@ -639,13 +786,17 @@ export function initializeScanner() {
       });
 
       if (mode === 'time-in' && hasTimeIn) {
-        addStatus(`Duplicate time-in blocked for ${userDoc.username || userDoc.email || userDoc.id} (already has time-in today).`, false);
+        addStatus('This account is already time in for today.', false);
         addDebug(`Blocked duplicate time-in for user ${userDoc.id} on ${startIso}`);
+        // Update session cache to mirror Firestore state
+        sessionAttendanceState.set(sessKey, { hasTimeIn: true, hasTimeOut: sess.hasTimeOut || hasTimeOut });
         return;
       }
       if (mode === 'time-out' && hasTimeOut) {
-        addStatus(`Duplicate time-out blocked for ${userDoc.username || userDoc.email || userDoc.id} (already has time-out today).`, false);
+        addStatus('This account is already time out for today.', false);
         addDebug(`Blocked duplicate time-out for user ${userDoc.id} on ${startIso}`);
+        // Update session cache to mirror Firestore state
+        sessionAttendanceState.set(sessKey, { hasTimeIn: sess.hasTimeIn || hasTimeIn, hasTimeOut: true });
         return;
       }
     } catch (err) {
@@ -667,8 +818,32 @@ export function initializeScanner() {
     };
     await addDoc(collection(db, 'attendance'), record);
 
+    // Persist per-day flags back to the user document so duplicates are blocked across refreshes
+    try {
+      const uref = doc(db, 'users', userDoc.id);
+      if (mode === 'time-in') {
+        await setDoc(uref, { lastTimeInDate: dayKey }, { merge: true });
+      } else if (mode === 'time-out') {
+        await setDoc(uref, { lastTimeOutDate: dayKey }, { merge: true });
+      }
+    } catch (e) {
+      console.warn('Failed to update lastTimeIn/OutDate on user', e);
+    }
+
+    // Mark this user as having time-in / time-out for the day in the session cache
+    const updated = {
+      hasTimeIn: sess.hasTimeIn || mode === 'time-in',
+      hasTimeOut: sess.hasTimeOut || mode === 'time-out'
+    };
+    sessionAttendanceState.set(sessKey, updated);
+
     addStatus(`Recorded ${record.mode} for ${record.username || record.userId} — ${record.status}`);
     addDebug('Saved attendance: ' + JSON.stringify(record));
+
+    // Note: we keep the camera running so the admin can scan multiple
+    // unique QRs (and time-in / time-out events) in a single session
+    // without needing to refresh the page. Duplicate protection is still
+    // enforced by the attendance checks above.
   }
 
   // initial camera enumeration

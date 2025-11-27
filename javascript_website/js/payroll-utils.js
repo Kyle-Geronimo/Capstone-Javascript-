@@ -293,6 +293,13 @@ export function computePayrollLine({
   const stPeter = Math.round(grossCents * Number(PAYROLL_CONFIG.stPeterPercent || 0));
 
   // Compose deductions object (employee-side amounts in cents)
+  const totalDeductionCents =
+    sssEmployee +
+    philEmployee +
+    pagibigEmployee +
+    stPeter +
+    (typeof adjustmentsCents === 'number' ? adjustmentsCents : 0);
+
   const deductions = {
     sss: { employee: sssEmployee, employer: sssEmployer, total: sssTotal },
     philhealth: { employee: philEmployee, employer: philEmployer, total: philTotal },
@@ -302,10 +309,10 @@ export function computePayrollLine({
     // NOTE: computePayrollLine receives 'adjustmentsCents' as a parameter (default 0)
     adjustments_total: typeof adjustmentsCents === 'number' ? adjustmentsCents : 0,
     // simple sum of employee-side deductions (what's withheld) — include adjustments here
-    total: sssEmployee + philEmployee + pagibigEmployee + stPeter + (typeof adjustmentsCents === 'number' ? adjustmentsCents : 0)
+    total: totalDeductionCents
   };
 
-  const netCents = grossCents - deductions.total;
+  const netCents = grossCents - totalDeductionCents;
 
   // Return monetary values as PHP strings (2 decimals) and also cents for storage
   return {
