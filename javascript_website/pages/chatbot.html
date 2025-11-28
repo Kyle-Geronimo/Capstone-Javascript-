@@ -22,28 +22,18 @@
     </div>
   </header>
 
-      <div class="dashboard-analytics-row">
-        <section class="chatbot-analytics-section">
-          <div id="chatbot-analytics" class="chatbot-analytics" aria-live="polite"></div>
-        </section>
+  <!-- New reservation dashboard (Guest Records + Reports & Analytics) -->
+  <div id="reservation-dashboard" class="reservation-dashboard" aria-live="polite"></div>
 
-        <section class="chatbot-analytics-section">
-          <div id="account-analytics" class="chatbot-analytics" aria-live="polite"></div>
-        </section>
-      </div>
+  <ul id="chatbot-data" class="chat-list" aria-live="polite">
+    <!-- JS will inject <li class="chat-item"> entries here -->
+  </ul>
 
-      <ul id="chatbot-data" class="chat-list" aria-live="polite">
-        <!-- JS will inject <li class="chat-item"> entries here -->
-      </ul>
-
-      <div class="empty-state" hidden id="empty-state">
-        <p>No inquiries yet — try refreshing.</p>
-      </div>
-    </section>
+  <div class="empty-state" hidden id="empty-state">
+    <p>No inquiries yet — try refreshing.</p>
   </div>
-</div>
 
-    <footer>
+  <footer>
     <div class="container">
       <p>&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>
     </div>
@@ -52,7 +42,7 @@
   <script type="module">
     import { auth } from '../js/firebase-config.js';
     import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
-    import { loadChatbotData, initChatbotAnalyticsRealtime, initAccountAnalyticsRealtime } from '../js/chatbot.js';
+    import { loadChatbotData, initReservationDashboard } from '../js/chatbot.js';
 
 
     auth.onAuthStateChanged((user) => {
@@ -74,8 +64,7 @@
 
 
       loadChatbotData();
-      initChatbotAnalyticsRealtime();
-      initAccountAnalyticsRealtime();
+      initReservationDashboard();
     });
   </script>
 </body>

@@ -102,6 +102,7 @@ export async function loadProfile(uid) {
         <div class="profile-actions">
           <button id="edit-profile-btn" class="action-btn primary">Edit Profile</button>
           <button id="logout-btn-card" class="action-btn secondary">Logout</button>
+          ${role === 'admin' ? '<button id="forgot-pin-btn" class="action-btn secondary">Forgot PIN</button>' : ''}
         </div>
       </div>
       
@@ -114,6 +115,7 @@ export async function loadProfile(uid) {
     // Get button references AFTER adding them to DOM
     const editBtn = document.getElementById('edit-profile-btn');
     const logoutBtn = document.getElementById('logout-btn-card');
+    const forgotPinBtn = document.getElementById('forgot-pin-btn');
 
     // Attach event handlers
     if (logoutBtn) {
@@ -146,6 +148,96 @@ export async function loadProfile(uid) {
           } catch (err) {
             console.error('Update failed:', err);
             alert('Unable to update profile: ' + err.message);
+          }
+        });
+      });
+    }
+
+    // Forgot PIN handler (admins only)
+    if (forgotPinBtn && role === 'admin') {
+      forgotPinBtn.addEventListener('click', () => {
+        const current = auth.currentUser;
+        if (!current) {
+          alert('You must be signed in to request a PIN reset.');
+          return;
+        }
+
+        const backdrop = document.createElement('div');
+        backdrop.className = 'profile-edit-backdrop';
+
+        const modal = document.createElement('div');
+        modal.className = 'profile-edit-modal';
+        modal.style.maxWidth = '420px';
+        modal.innerHTML = `
+          <h3>Forgot Admin PIN</h3>
+          <p style="margin-top:4px;margin-bottom:16px;font-size:0.9rem;color:#4b5563;">
+            We will generate a new 6-digit PIN for your admin account and send it to your registered email address.
+          </p>
+          <div id="forgotPinStatus" style="min-height:18px;font-size:0.8rem;color:#b91c1c;margin-bottom:8px;"></div>
+          <div class="modal-actions">
+            <button type="button" class="action-btn secondary" id="forgotPinCancel">Cancel</button>
+            <button type="button" class="action-btn primary" id="forgotPinSubmit">Send PIN Email</button>
+          </div>
+        `;
+
+        const root = document.createElement('div');
+        root.appendChild(backdrop);
+        root.appendChild(modal);
+        document.body.appendChild(root);
+
+        const statusEl = modal.querySelector('#forgotPinStatus');
+        const btnCancel = modal.querySelector('#forgotPinCancel');
+        const btnSubmit = modal.querySelector('#forgotPinSubmit');
+
+        function closeModal() {
+          root.remove();
+        }
+
+        btnCancel.addEventListener('click', closeModal);
+        backdrop.addEventListener('click', (e) => {
+          if (e.target === backdrop) closeModal();
+        });
+
+        btnSubmit.addEventListener('click', async () => {
+          btnSubmit.disabled = true;
+          statusEl.style.color = '#4b5563';
+          statusEl.textContent = 'Sending PIN reset request...';
+
+          try {
+            const token = await current.getIdToken(true);
+            const originBase = (window.location && window.location.origin) ? window.location.origin.replace(/\/$/, '') : '';
+            const cfgBase = (window.API_BASE && window.API_BASE.replace(/\/$/, '')) || '';
+            const API_BASE = originBase || cfgBase || 'http://localhost:3000';
+
+            const resp = await fetch(`${API_BASE}/api/admin/forgot-pin`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({})
+            });
+
+            let payload = null;
+            try {
+              payload = await resp.json();
+            } catch (_) {}
+
+            if (!resp.ok) {
+              const msg = payload && (payload.error || payload.message) ? payload.error || payload.message : `Status ${resp.status}`;
+              statusEl.style.color = '#b91c1c';
+              statusEl.textContent = msg;
+              btnSubmit.disabled = false;
+              return;
+            }
+
+            statusEl.style.color = '#15803d';
+            statusEl.textContent = 'If your admin email is valid, a new PIN has been sent.';
+            setTimeout(closeModal, 1600);
+          } catch (err) {
+            statusEl.style.color = '#b91c1c';
+            statusEl.textContent = (err && err.message) ? err.message : 'Failed to send PIN reset email.';
+            btnSubmit.disabled = false;
           }
         });
       });

@@ -1808,7 +1808,8 @@ function calculateAll() {
              + Number(r.hdmfSalaryLoan || 0)
              + Number(r.hdmfCalamityLoan || 0)
              + Number(r.cashAdvance || 0)
-             + Number(r.stPeter || 0); // St. Peter treated as manual deduction
+             + Number(r.stPeter || 0) // St. Peter treated as manual deduction
+             + Number(r.credit || 0); // include credit in manual deductions
 
     // Under Time / Late Amount = (daily rate / 8) * missing hours
     const ratePerDayNum = Number(r.ratePerDay || 0);
@@ -1860,7 +1861,10 @@ function calculateAll() {
       adjustmentsCents: adjustmentsCents,
       monthlySalary: monthlySalaryForStat,
       periodScaling: periodScaling,
-      manualPagibig: (r.pagibig !== undefined ? r.pagibig : null),
+      manualSss: (r.sss !== null && r.sss !== undefined ? r.sss : null),
+      manualPhilhealth: (r.philhealth !== null && r.philhealth !== undefined ? r.philhealth : null),
+      manualPagibig: (r.pagibig !== undefined && r.pagibig !== null ? r.pagibig : null),
+      manualStPeter: (r.stPeter !== null && r.stPeter !== undefined ? r.stPeter : null),
       sssOverride: sssOverride
     });
 
@@ -1910,8 +1914,19 @@ async function savePayrollRun() {
           otHours: r.otHours || 0,
           regHolidayHours: r.regularHolidayHours || 0,
           specialHolidayHours: r.specialHolidayHours || 0,
-          adjustmentsCents: toCents(Number(r.sssSalaryLoan || 0) + Number(r.sssCalamityLoan || 0) + Number(r.hdmfSalaryLoan || 0) + Number(r.hdmfCalamityLoan || 0) + Number(r.cashAdvance || 0) + Number(r.utLateAmount || 0)),
-          manualPagibig: (r.pagibig !== undefined ? r.pagibig : null),
+          adjustmentsCents: toCents(
+            Number(r.sssSalaryLoan || 0) +
+            Number(r.sssCalamityLoan || 0) +
+            Number(r.hdmfSalaryLoan || 0) +
+            Number(r.hdmfCalamityLoan || 0) +
+            Number(r.cashAdvance || 0) +
+            Number(r.credit || 0) +
+            Number(r.utLateAmount || 0)
+          ),
+          manualSss: (r.sss !== null && r.sss !== undefined ? r.sss : null),
+          manualPhilhealth: (r.philhealth !== null && r.philhealth !== undefined ? r.philhealth : null),
+          manualPagibig: (r.pagibig !== undefined && r.pagibig !== null ? r.pagibig : null),
+          manualStPeter: (r.stPeter !== null && r.stPeter !== undefined ? r.stPeter : null),
           sssOverride: sssOverride
         });
       }

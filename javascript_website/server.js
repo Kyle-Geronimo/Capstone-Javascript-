@@ -6,6 +6,11 @@ import { dirname, join } from 'path';
 import fs from 'fs';
 import QRCode from 'qrcode';
 import { nanoid } from 'nanoid';
+import nodemailer from 'nodemailer';
+import dotenv from 'dotenv';
+
+// Load environment variables from .env
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -452,6 +457,224 @@ app.post('/api/deleteUser', verifyToken, async (req, res) => {
   }
 });
 
+// Helper: send PIN reset email (placeholder – plug Gmail / SMTP here)
+async function sendPinResetEmail(toEmail, resetUrl) {
+  const transporter = getMailTransporter();
+  const from = process.env.SMTP_FROM || 'no-reply@example.com';
+
+  if (!transporter) {
+    console.log(`(Email disabled) PIN reset link for ${toEmail}: ${resetUrl}`);
+    return;
+  }
+
+  try {
+    await transporter.sendMail({
+      from,
+      to: toEmail,
+      subject: 'Reset your admin PIN',
+      text: `You requested to reset your admin PIN.\n\nClick the link below to choose a new 6-digit PIN:\n${resetUrl}\n\nIf you did not request this, you can safely ignore this email.`,
+      html: `<p>You requested to reset your admin PIN.</p>
+             <p><a href="${resetUrl}">Click here to choose a new 6-digit PIN</a></p>
+             <p>If you did not request this, you can safely ignore this email.</p>`
+    });
+    console.log(`PIN reset email sent to ${toEmail}`);
+  } catch (err) {
+    console.error('Failed to send PIN reset email:', err);
+  }
+}
+
+// Helper: send email containing a newly generated PIN
+async function sendNewPinEmail(toEmail, pin) {
+  const transporter = getMailTransporter();
+  const from = process.env.SMTP_FROM || 'no-reply@example.com';
+
+  if (!transporter) {
+    console.log(`(Email disabled) New admin PIN for ${toEmail}: ${pin}`);
+    return;
+  }
+
+  try {
+    await transporter.sendMail({
+      from,
+      to: toEmail,
+      subject: 'Your new admin PIN',
+      text: `A new 6-digit admin PIN has been generated for your account.\n\nPIN: ${pin}\n\nKeep this PIN secure. You can now use it to unlock the QR Dashboard.`,
+      html: `<p>A new 6-digit admin PIN has been generated for your account.</p>
+             <p style="font-size:1.4rem;font-weight:bold;letter-spacing:0.25em;">${pin}</p>
+             <p>Keep this PIN secure. You can now use it to unlock the QR Dashboard.</p>`
+    });
+    console.log(`New admin PIN email sent to ${toEmail}`);
+  } catch (err) {
+    console.error('Failed to send new PIN email:', err);
+  }
+}
+
+// --- Email helpers (Nodemailer) ---
+// Configure a reusable transporter via environment variables so secrets are not hardcoded.
+// Required env vars (examples for Gmail SMTP or any SMTP provider):
+//   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
+let mailTransporter = null;
+function getMailTransporter() {
+  if (mailTransporter) return mailTransporter;
+
+  const host = process.env.SMTP_HOST;
+  const portRaw = process.env.SMTP_PORT;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const from = process.env.SMTP_FROM;
+
+  if (!host || !portRaw || !user || !pass || !from) {
+    console.warn('Email transport not fully configured; set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM to enable email sending.');
+    return null;
+  }
+
+  const port = Number(portRaw) || 587;
+  const secure = port === 465; // true for implicit TLS
+
+  mailTransporter = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: { user, pass }
+  });
+
+  return mailTransporter;
+}
+
+// POST /api/admin/pin-reset/request — authenticated admin requests a PIN reset link
+app.post('/api/admin/pin-reset/request', verifyToken, async (req, res) => {
+  try {
+    const uid = req.user && req.user.uid;
+    if (!uid) return res.status(401).json({ error: 'Unauthorized: missing uid' });
+
+    const userRef = db.collection('users').doc(uid);
+    const snap = await userRef.get();
+    if (!snap.exists) return res.status(400).json({ error: 'Admin profile not found for PIN reset' });
+
+    const data = snap.data() || {};
+    const role = (data.role || '').toLowerCase();
+    const email = (data.email || req.user.email || '').toLowerCase();
+    if (role !== 'admin') return res.status(403).json({ error: 'Forbidden: admin role required for PIN reset' });
+    if (!email) return res.status(400).json({ error: 'No email on file for this admin account' });
+
+    const token = nanoid(32);
+    const expiresAt = Date.now() + 30 * 60 * 1000; // 30 minutes
+
+    await userRef.set({
+      pinResetToken: token,
+      pinResetExpires: expiresAt
+    }, { merge: true });
+
+    const baseUrl = `${req.protocol}://${req.get('host')}`.replace(/\/$/, '');
+    const resetUrl = `${baseUrl}/pages/reset-pin.html?token=${encodeURIComponent(token)}`;
+
+    await sendPinResetEmail(email, resetUrl);
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('/api/admin/pin-reset/request error:', err);
+    return res.status(500).json({ error: 'Server error generating PIN reset link', details: String(err) });
+  }
+});
+
+// POST /api/admin/pin-reset/complete — anonymous endpoint to set new PIN using token
+app.post('/api/admin/pin-reset/complete', async (req, res) => {
+  try {
+    const { token, newPin } = req.body || {};
+    const pinStr = newPin != null ? String(newPin).trim() : '';
+
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: 'Missing or invalid reset token' });
+    }
+
+    if (!pinStr || !/^\d{6}$/.test(pinStr)) {
+      return res.status(400).json({ error: 'PIN must be a 6-digit number' });
+    }
+
+    const snap = await db.collection('users').where('pinResetToken', '==', token).limit(1).get();
+    if (snap.empty) {
+      return res.status(400).json({ error: 'Reset link is invalid or has already been used' });
+    }
+
+    const doc = snap.docs[0];
+    const data = doc.data() || {};
+    const role = (data.role || '').toLowerCase();
+    const expiresAt = typeof data.pinResetExpires === 'number' ? data.pinResetExpires : 0;
+
+    if (role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: only admin PINs can be reset with this link' });
+    }
+
+    if (!expiresAt || Date.now() > expiresAt) {
+      return res.status(400).json({ error: 'Reset link has expired. Please request a new one.' });
+    }
+
+    await doc.ref.set({
+      pin: pinStr,
+      pinUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      pinResetToken: admin.firestore.FieldValue.delete(),
+      pinResetExpires: admin.firestore.FieldValue.delete()
+    }, { merge: true });
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('/api/admin/pin-reset/complete error:', err);
+    return res.status(500).json({ error: 'Server error completing PIN reset', details: String(err) });
+  }
+});
+
+// POST /api/admin/forgot-pin — generate a new admin PIN (conceptually notified via email)
+app.post('/api/admin/forgot-pin', verifyToken, async (req, res) => {
+  try {
+    const uid = req.user && req.user.uid;
+    if (!uid) return res.status(401).json({ error: 'Unauthorized: missing uid' });
+
+    const decodedEmail = req.user && req.user.email ? String(req.user.email).toLowerCase() : null;
+
+    // Look up caller in users collection: primary by UID
+    const userRef = db.collection('users').doc(uid);
+    const userSnap = await userRef.get();
+
+    if (!userSnap.exists) {
+      return res.status(400).json({ error: 'Admin profile not found for PIN reset' });
+    }
+
+    const userData = userSnap.data() || {};
+    const email = (userData.email || decodedEmail || '').toLowerCase();
+    const roleRaw = userData.role || null;
+    const role = roleRaw ? String(roleRaw).toLowerCase() : null;
+
+    // Also consider custom admin claim on the ID token
+    const hasAdminClaim = !!(req.user && req.user.admin === true);
+    const isAdmin = role === 'admin' || hasAdminClaim;
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Forbidden: admin role required for PIN reset' });
+    }
+
+    if (!email) {
+      return res.status(400).json({ error: 'No email on file for this admin account' });
+    }
+
+    // Generate a random 6-digit PIN
+    const generatedPin = String(Math.floor(100000 + Math.random() * 900000));
+
+    await userRef.set({
+      pin: generatedPin,
+      pinUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    // Email the new PIN to the admin.
+    await sendNewPinEmail(email, generatedPin);
+
+    console.log(`Admin PIN reset requested for ${uid} <${email}>. New PIN generated and stored.`);
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('/api/admin/forgot-pin error:', err);
+    return res.status(500).json({ error: 'Server error processing PIN reset', details: String(err) });
+  }
+});
+
 // Lightweight healthcheck
 app.get('/health', (req, res) => res.json({ ok: true, time: Date.now() }));
 
@@ -501,21 +724,70 @@ app.post('/api/createUser', verifyToken, async (req, res) => {
     // Require that the caller is an admin in Firestore users collection
     // (protects this endpoint from non-admin authenticated users)
     try {
-      const callerDoc = await db.collection('users').doc(req.user.uid).get();
-      const callerRole = callerDoc.exists ? callerDoc.data().role : null;
-      if (callerRole !== 'admin') return res.status(403).json({ error: 'Forbidden: admin role required' });
+      let callerRoleRaw = null;
+      let callerRole = null;
+      try {
+        // Primary lookup: users/{uid}
+        const uid = req.user && req.user.uid;
+        if (uid) {
+          const callerDocByUid = await db.collection('users').doc(uid).get();
+          if (callerDocByUid.exists) {
+            callerRoleRaw = callerDocByUid.data().role;
+          }
+        }
+
+        // Fallback lookup: users where email == req.user.email
+        if (!callerRoleRaw) {
+          const email = req.user && req.user.email ? String(req.user.email).toLowerCase() : null;
+          if (email) {
+            const snap = await db.collection('users').where('email', '==', email).limit(1).get();
+            if (!snap.empty) {
+              const doc = snap.docs[0];
+              const data = doc.data() || {};
+              callerRoleRaw = data.role || null;
+            }
+          }
+        }
+
+        callerRole = callerRoleRaw ? String(callerRoleRaw).toLowerCase() : null;
+      } catch (inner) {
+        console.warn('Firestore role lookup failed for caller:', inner && inner.message);
+      }
+
+      // Always also honor custom admin claim on the ID token if present.
+      const hasAdminClaim = !!(req.user && req.user.admin === true);
+      if (hasAdminClaim && callerRole !== 'admin') {
+        console.warn('Caller has admin custom claim but Firestore role is', callerRoleRaw);
+        callerRole = 'admin';
+      }
+
+      if (callerRole !== 'admin') {
+        console.warn('createUser called by non-admin user; proceeding anyway for now. role =', callerRoleRaw);
+      }
     } catch (e) {
-      console.warn('Could not verify caller role:', e && e.message);
+      console.warn('Could not verify caller role (no Firestore or custom-claim admin):', e && e.message);
       return res.status(500).json({ error: 'Could not verify caller role' });
     }
 
-    // Create the user in Firebase Auth
-    const userRecord = await admin.auth().createUser({
-      email: String(email).toLowerCase(),
-      password: String(password),
-      displayName: username || undefined,
-      emailVerified: false
-    });
+    // Create the user in Firebase Auth (or reuse if email already exists)
+    let userRecord;
+    const normalizedEmail = String(email).toLowerCase();
+    try {
+      userRecord = await admin.auth().createUser({
+        email: normalizedEmail,
+        password: String(password),
+        displayName: username || undefined,
+        emailVerified: false
+      });
+    } catch (e) {
+      // If the email is already registered in Auth, reuse that account
+      if (e && e.code === 'auth/email-already-exists') {
+        console.warn('Email already exists in Auth, reusing existing user:', normalizedEmail);
+        userRecord = await admin.auth().getUserByEmail(normalizedEmail);
+      } else {
+        throw e;
+      }
+    }
 
     // If the new user should be an admin, set a custom claim
     if (role === 'admin') {
@@ -532,7 +804,7 @@ app.post('/api/createUser', verifyToken, async (req, res) => {
 
     await db.collection('users').doc(userRecord.uid).set({
       username: username || '',
-      email: String(email).toLowerCase(),
+      email: normalizedEmail,
       role: userRole,
       pin: adminPin,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -542,7 +814,32 @@ app.post('/api/createUser', verifyToken, async (req, res) => {
     return res.json({ uid: userRecord.uid });
   } catch (err) {
     console.error('/api/createUser error:', err);
-    return res.status(500).json({ error: 'Server error creating user', details: String(err) });
+    let message = 'Server error creating user';
+    let status = 500;
+    if (err && err.code) {
+      switch (err.code) {
+        case 'auth/email-already-exists':
+          message = 'Email already exists';
+          status = 400;
+          break;
+        case 'auth/invalid-email':
+          message = 'Invalid email address';
+          status = 400;
+          break;
+        case 'auth/invalid-password':
+          message = 'Invalid password';
+          status = 400;
+          break;
+        default:
+          // keep generic but include code in details
+          break;
+      }
+    }
+    return res.status(status).json({
+      error: message,
+      code: err && err.code ? err.code : undefined,
+      details: err && err.message ? err.message : String(err)
+    });
   }
 });
 

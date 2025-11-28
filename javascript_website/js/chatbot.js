@@ -9,7 +9,8 @@ import {
     limit,
     onSnapshot,
     doc,
-    deleteDoc
+    deleteDoc,
+    updateDoc
 } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
 
 // Function to categorize inquiries based on keywords
@@ -1171,6 +1172,416 @@ export function initAccountAnalyticsRealtime() {
         if (typeof unsubUsers === 'function') unsubUsers();
         if (typeof unsubVisits === 'function') unsubVisits();
     };
+}
+
+// -----------------------------
+// Reservation dashboard (Guest Records + Reports & Analytics)
+// -----------------------------
+export function initReservationDashboard() {
+    const root = document.getElementById('reservation-dashboard');
+    if (!root) return;
+
+    if (!auth.currentUser) {
+        root.innerHTML = '<div class="auth-message"><p>Please log in to manage guest records.</p></div>';
+        return;
+    }
+
+    root.innerHTML = `
+        <section class="guest-dashboard">
+            <div class="guest-header">
+                <div>
+                    <h2>Guest Records</h2>
+                    <p class="guest-subtitle">Manage in-house guests, reservations, and history.</p>
+                </div>
+                <div class="guest-summary-row">
+                    <div class="guest-summary-card"><div class="guest-summary-label">Total guests</div><div class="guest-summary-value" id="guestTotalCount">0</div></div>
+                    <div class="guest-summary-card"><div class="guest-summary-label">Currently in-house</div><div class="guest-summary-value" id="guestInHouseCount">0</div></div>
+                    <div class="guest-summary-card"><div class="guest-summary-label">Checked out</div><div class="guest-summary-value" id="guestCheckedOutCount">0</div></div>
+                    <div class="guest-summary-card"><div class="guest-summary-label">Upcoming arrivals</div><div class="guest-summary-value" id="guestUpcomingCount">0</div></div>
+                </div>
+            </div>
+
+            <div class="guest-card">
+                <h3>Add / Update Guest</h3>
+                <form id="guestForm" class="guest-form">
+                    <input type="hidden" id="reservationId" />
+                    <div class="guest-form-row">
+                        <div class="guest-form-group"><label for="guestName">Guest name</label><input type="text" id="guestName" placeholder="e.g. Juan Dela Cruz" required /></div>
+                        <div class="guest-form-group"><label for="guestRoom">Room</label><input type="text" id="guestRoom" placeholder="e.g. 203" required /></div>
+                        <div class="guest-form-group"><label for="guestStatus">Status</label><select id="guestStatus" required><option value="in-house">In-house</option><option value="reserved">Reserved</option><option value="checked-out">Checked out</option></select></div>
+                    </div>
+                    <div class="guest-form-row">
+                        <div class="guest-form-group"><label for="guestCheckIn">Check-in date</label><input type="date" id="guestCheckIn" required /></div>
+                        <div class="guest-form-group"><label for="guestCheckOut">Check-out date</label><input type="date" id="guestCheckOut" required /></div>
+                        <div class="guest-form-group"><label for="guestHotel">Hotel</label>
+                            <select id="guestHotel" required>
+                                <option value="D'Mariners Inn Hotel">D'Mariners Inn Hotel</option>
+                                <option value="Wennrod Hotel">Wennrod Hotel</option>
+                                <option value="Bicotels Hotel">Bicotels Hotel</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="guest-form-actions"><button type="button" id="guestResetBtn" class="action-btn secondary">Clear</button><button type="submit" class="action-btn primary">Save Guest</button></div>
+                </form>
+            </div>
+
+            <div class="guest-card">
+                <div class="guest-card-header">
+                    <div>
+                        <h3>Guest List</h3>
+                        <p class="guest-card-sub">View and manage current reservations.</p>
+                    </div>
+                    <div class="guest-filters">
+                        <select id="guestStatusFilter" class="guest-filter-input">
+                            <option value="all">All status</option>
+                            <option value="in-house">In-house</option>
+                            <option value="reserved">Reserved</option>
+                            <option value="checked-out">Checked out</option>
+                        </select>
+                        <input type="date" id="guestFromDate" class="guest-filter-input" />
+                        <input type="date" id="guestToDate" class="guest-filter-input" />
+                        <input type="text" id="guestSearch" class="guest-filter-input" placeholder="Search by guest or room..." />
+                    </div>
+                </div>
+                <div id="guestMessage" class="guest-message" aria-live="polite"></div>
+                <div class="table-container">
+                    <table class="data-table guest-table">
+                        <thead>
+                            <tr>
+                                <th>Guest Name</th>
+                                <th>Hotel</th>
+                                <th>Room</th>
+                                <th>Check-in</th>
+                                <th>Check-out</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="guestTableBody"></tbody>
+                    </table>
+                    <div id="guestPagination"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Centered delete confirmation modal -->
+        <div id="guestDeleteModal" class="guest-delete-modal-overlay" hidden>
+            <div class="guest-delete-modal">
+                <h4 class="guest-delete-title">Delete reservation</h4>
+                <p class="guest-delete-text" id="guestDeleteText">Delete this reservation?</p>
+                <div class="guest-delete-actions">
+                    <button type="button" id="guestDeleteConfirm" class="guest-message-btn guest-message-btn--danger">Delete</button>
+                    <button type="button" id="guestDeleteCancel" class="guest-message-btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const reservationsCol = collection(db, 'guestReservations');
+    const reservationsQuery = query(reservationsCol, orderBy('checkIn', 'desc'), limit(200));
+
+    const guestStatusFilter = document.getElementById('guestStatusFilter');
+    const guestFromDate = document.getElementById('guestFromDate');
+    const guestToDate = document.getElementById('guestToDate');
+    const guestSearch = document.getElementById('guestSearch');
+    const guestTableBody = document.getElementById('guestTableBody');
+    const guestPagination = document.getElementById('guestPagination');
+
+    const guestForm = document.getElementById('guestForm');
+    const reservationIdInput = document.getElementById('reservationId');
+    const guestNameInput = document.getElementById('guestName');
+    const guestRoomInput = document.getElementById('guestRoom');
+    const guestCheckInInput = document.getElementById('guestCheckIn');
+    const guestCheckOutInput = document.getElementById('guestCheckOut');
+    const guestHotelInput = document.getElementById('guestHotel');
+    const guestStatusInput = document.getElementById('guestStatus');
+    const guestResetBtn = document.getElementById('guestResetBtn');
+
+    const totalEl = document.getElementById('guestTotalCount');
+    const inHouseEl = document.getElementById('guestInHouseCount');
+    const checkedOutEl = document.getElementById('guestCheckedOutCount');
+    const upcomingEl = document.getElementById('guestUpcomingCount');
+
+    let reservations = [];
+    let showingAllGuests = false;
+
+    const guestMessageEl = document.getElementById('guestMessage');
+
+    const deleteModal = document.getElementById('guestDeleteModal');
+    const deleteTextEl = document.getElementById('guestDeleteText');
+    const deleteConfirmBtn = document.getElementById('guestDeleteConfirm');
+    const deleteCancelBtn = document.getElementById('guestDeleteCancel');
+    let pendingDeleteId = null;
+
+    const setGuestMessage = (text, type = 'info') => {
+        if (!guestMessageEl) return;
+        if (!text) {
+            guestMessageEl.textContent = '';
+            guestMessageEl.className = 'guest-message';
+            return;
+        }
+        guestMessageEl.textContent = text;
+        guestMessageEl.className = `guest-message guest-message--${type}`;
+    };
+
+    const openDeleteModal = (reservationId, displayName) => {
+        if (!deleteModal || !deleteTextEl) return;
+        pendingDeleteId = reservationId;
+        const safeName = escapeHtml(displayName || 'this reservation');
+        deleteTextEl.innerHTML = `Delete <strong>${safeName}</strong>?`;
+        deleteModal.hidden = false;
+        deleteModal.classList.add('is-open');
+    };
+
+    const closeDeleteModal = () => {
+        if (!deleteModal) return;
+        deleteModal.hidden = true;
+        deleteModal.classList.remove('is-open');
+        pendingDeleteId = null;
+    };
+
+    deleteCancelBtn?.addEventListener('click', (e) => {
+        e.preventDefault();
+        closeDeleteModal();
+    });
+
+    deleteConfirmBtn?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (!pendingDeleteId) {
+            closeDeleteModal();
+            return;
+        }
+        try {
+            await deleteDoc(doc(db, 'guestReservations', pendingDeleteId));
+            setGuestMessage('Reservation deleted successfully.', 'success');
+        } catch (err) {
+            console.error('Failed to delete reservation', err);
+            setGuestMessage('Failed to delete reservation. Please try again.', 'error');
+        } finally {
+            closeDeleteModal();
+        }
+    });
+
+    const asDateOnly = (val) => {
+        if (!val) return null;
+        const d = val.toDate ? val.toDate() : (val instanceof Date ? val : new Date(val));
+        if (isNaN(d.getTime())) return null;
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    };
+
+    const fmtDate = (d) => (d ? d.toISOString().slice(0, 10) : '');
+
+    const statusBadgeClass = (s) => {
+        if (s === 'in-house') return 'status-badge status-inhouse';
+        if (s === 'reserved') return 'status-badge status-reserved';
+        if (s === 'checked-out') return 'status-badge status-checkedout';
+        return 'status-badge';
+    };
+
+    const recomputeSummary = () => {
+        const today = new Date();
+        const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        let total = reservations.length;
+        let inHouse = 0;
+        let checked = 0;
+        let upcoming = 0;
+        reservations.forEach(r => {
+            const status = r.status || 'reserved';
+            const ci = asDateOnly(r.checkIn);
+            if (status === 'in-house') inHouse++;
+            if (status === 'checked-out') checked++;
+            if (status === 'reserved' && ci && ci >= todayOnly) upcoming++;
+        });
+        if (totalEl) totalEl.textContent = String(total);
+        if (inHouseEl) inHouseEl.textContent = String(inHouse);
+        if (checkedOutEl) checkedOutEl.textContent = String(checked);
+        if (upcomingEl) upcomingEl.textContent = String(upcoming);
+    };
+
+    const renderGuestTable = () => {
+        if (!guestTableBody) return;
+        const statusFilter = guestStatusFilter?.value || 'all';
+        const fromVal = guestFromDate?.value || '';
+        const toVal = guestToDate?.value || '';
+        const searchVal = (guestSearch?.value || '').toLowerCase();
+        const fromD = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+        const toD = toVal ? new Date(toVal + 'T23:59:59') : null;
+
+        const filtered = reservations.filter(r => {
+            if (statusFilter !== 'all' && (r.status || '') !== statusFilter) return false;
+            const ci = asDateOnly(r.checkIn);
+            if (fromD && ci && ci < fromD) return false;
+            if (toD && ci && ci > toD) return false;
+            if (searchVal) {
+                const n = (r.guestName || '').toLowerCase();
+                const rm = (r.room || '').toLowerCase();
+                const h = (r.hotel || '').toLowerCase();
+                if (!n.includes(searchVal) && !rm.includes(searchVal) && !h.includes(searchVal)) return false;
+            }
+            return true;
+        });
+
+        const shouldPaginate = filtered.length > 5;
+        const rowsToRender = (!shouldPaginate || showingAllGuests) ? filtered : filtered.slice(0, 5);
+
+        if (!rowsToRender.length) {
+            guestTableBody.innerHTML = `<tr><td colspan="7"><div class="no-data">No reservations found for the selected filters.</div></td></tr>`;
+            if (guestPagination) guestPagination.innerHTML = '';
+            return;
+        }
+
+        guestTableBody.innerHTML = rowsToRender.map(r => {
+            const ci = fmtDate(asDateOnly(r.checkIn));
+            const co = fmtDate(asDateOnly(r.checkOut));
+            const st = r.status || 'reserved';
+            return `
+                <tr data-id="${r.id}">
+                    <td>${escapeHtml(r.guestName || '')}</td>
+                    <td>${escapeHtml(r.hotel || '')}</td>
+                    <td>${escapeHtml(r.room || '')}</td>
+                    <td>${escapeHtml(ci)}</td>
+                    <td>${escapeHtml(co)}</td>
+                    <td><span class="${statusBadgeClass(st)}">${escapeHtml(st)}</span></td>
+                    <td>
+                        <button type="button" class="guest-edit-btn">Edit</button>
+                        <button type="button" class="guest-delete-btn">Delete</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        if (guestPagination) {
+            guestPagination.innerHTML = '';
+            if (shouldPaginate && !showingAllGuests) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'action-btn secondary';
+                btn.textContent = 'View all';
+                btn.addEventListener('click', () => {
+                    showingAllGuests = true;
+                    renderGuestTable();
+                });
+                guestPagination.appendChild(btn);
+            } else if (shouldPaginate && showingAllGuests) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'action-btn secondary';
+                btn.textContent = 'View less';
+                btn.addEventListener('click', () => {
+                    showingAllGuests = false;
+                    renderGuestTable();
+                });
+                guestPagination.appendChild(btn);
+            }
+        }
+
+        guestTableBody.querySelectorAll('.guest-edit-btn').forEach(btn => {
+            btn.addEventListener('click', (ev) => {
+                const tr = ev.currentTarget.closest('tr');
+                const id = tr?.getAttribute('data-id');
+                const rec = reservations.find(r => r.id === id);
+                if (!rec) return;
+                reservationIdInput.value = rec.id;
+                guestNameInput.value = rec.guestName || '';
+                guestRoomInput.value = rec.room || '';
+                guestCheckInInput.value = fmtDate(asDateOnly(rec.checkIn));
+                guestCheckOutInput.value = fmtDate(asDateOnly(rec.checkOut));
+                if (guestHotelInput) guestHotelInput.value = rec.hotel || "D'Mariners Inn Hotel";
+                guestStatusInput.value = rec.status || 'reserved';
+            });
+        });
+
+        guestTableBody.querySelectorAll('.guest-delete-btn').forEach(btn => {
+            btn.addEventListener('click', (ev) => {
+                const tr = ev.currentTarget.closest('tr');
+                const id = tr?.getAttribute('data-id');
+                if (!id) return;
+                const rec = reservations.find(r => r.id === id);
+                openDeleteModal(id, rec?.guestName || 'this reservation');
+            });
+        });
+    };
+
+    const clearForm = () => {
+        reservationIdInput.value = '';
+        guestNameInput.value = '';
+        guestRoomInput.value = '';
+        guestCheckInInput.value = '';
+        guestCheckOutInput.value = '';
+        if (guestHotelInput) guestHotelInput.value = "D'Mariners Inn Hotel";
+        guestStatusInput.value = 'in-house';
+    };
+
+    guestResetBtn?.addEventListener('click', (e) => {
+        e.preventDefault();
+        clearForm();
+    });
+
+    guestForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = guestNameInput.value.trim();
+        const room = guestRoomInput.value.trim();
+        const ciVal = guestCheckInInput.value;
+        const coVal = guestCheckOutInput.value;
+        const hotel = guestHotelInput?.value || "D'Mariners Inn Hotel";
+        const status = guestStatusInput.value;
+        if (!name || !room || !ciVal || !coVal || !hotel) {
+            setGuestMessage('Please fill in all required fields before saving.', 'error');
+            return;
+        }
+        const ci = new Date(ciVal + 'T12:00:00');
+        const co = new Date(coVal + 'T12:00:00');
+        if (co < ci) {
+            setGuestMessage('Check-out date cannot be before check-in date.', 'error');
+            return;
+        }
+        const payload = {
+            guestName: name,
+            room,
+            checkIn: ci,
+            checkOut: co,
+            hotel,
+            status,
+            updatedAt: serverTimestamp(),
+            userId: auth.currentUser?.uid || null
+        };
+        const existing = reservationIdInput.value;
+        try {
+            if (existing) {
+                await updateDoc(doc(db, 'guestReservations', existing), payload);
+                setGuestMessage('Guest reservation updated.', 'success');
+            } else {
+                await addDoc(reservationsCol, { ...payload, createdAt: serverTimestamp() });
+                setGuestMessage('Guest reservation added.', 'success');
+            }
+            clearForm();
+        } catch (err) {
+            console.error('Failed to save reservation', err);
+            setGuestMessage('Failed to save reservation. Please try again.', 'error');
+        }
+    });
+
+    const resetPaginationAndRender = () => {
+        showingAllGuests = false;
+        renderGuestTable();
+    };
+
+    guestStatusFilter?.addEventListener('change', resetPaginationAndRender);
+    guestFromDate?.addEventListener('change', resetPaginationAndRender);
+    guestToDate?.addEventListener('change', resetPaginationAndRender);
+    guestSearch?.addEventListener('input', resetPaginationAndRender);
+
+    onSnapshot(reservationsQuery, (snap) => {
+        reservations = snap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
+        showingAllGuests = false;
+        recomputeSummary();
+        renderGuestTable();
+    }, (err) => {
+        console.error('Error loading guest reservations', err);
+        if (guestTableBody) {
+            guestTableBody.innerHTML = `<tr><td colspan="6"><div class="error-message">Error loading guest reservations: ${escapeHtml(err.message)}</div></td></tr>`;
+        }
+    });
 }
 
 // Helper function to escape HTML special characters

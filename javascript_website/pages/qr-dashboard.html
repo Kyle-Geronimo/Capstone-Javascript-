@@ -137,7 +137,7 @@
   import { auth, db } from '../js/firebase-config.js';
   import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
   import { initializeGenerator, initializeScanner } from '../js/qr.js';
-  import { getDoc, doc } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
+  import { getDoc, doc, updateDoc } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
 
 
   updateNavVisibility();
@@ -157,7 +157,7 @@
   }
 
   // Simple helper to create a full-screen PIN overlay with blurred background.
-  function showPinOverlay(correctPin) {
+  function showPinOverlay(correctPin, userId) {
     return new Promise((resolve, reject) => {
       const overlay = document.createElement('div');
       overlay.id = 'qr-pin-overlay';
@@ -177,6 +177,7 @@
           <input id="qr-pin-input" type="password" maxlength="6" inputmode="numeric" autocomplete="off"
                  style="font-size:1.4rem;letter-spacing:0.4em;text-align:center;padding:8px 12px;border-radius:999px;border:1px solid #d1d5db;width:100%;box-sizing:border-box;" />
           <div id="qr-pin-error" style="min-height:18px;margin-top:8px;font-size:0.8rem;color:#b91c1c;"></div>
+          <button id="qr-pin-forgot" type="button" style="margin-top:4px;background:none;border:none;color:#1d4ed8;font-size:0.8rem;cursor:pointer;text-decoration:underline;">Forgot PIN? Click here</button>
           <div style="display:flex;gap:8px;justify-content:center;margin-top:16px;">
             <button id="qr-pin-cancel" type="button" class="action-btn" style="background:#e5e7eb;color:#374151;">Cancel</button>
             <button id="qr-pin-submit" type="button" class="action-btn primary">Unlock</button>
@@ -189,6 +190,8 @@
       const errEl = document.getElementById('qr-pin-error');
       const btnSubmit = document.getElementById('qr-pin-submit');
       const btnCancel = document.getElementById('qr-pin-cancel');
+      const btnForgot = document.getElementById('qr-pin-forgot');
+      let activeCorrectPin = String(correctPin);
 
       function cleanup(ok) {
         overlay.remove();
@@ -205,17 +208,47 @@
           errEl.textContent = 'PIN must be exactly 6 digits.';
           return;
         }
-        if (val !== String(correctPin)) {
+        if (val !== activeCorrectPin) {
           errEl.textContent = 'Incorrect PIN.';
           return;
         }
         cleanup(true);
       }
 
+      async function handleForgotPin() {
+        if (!userId) {
+          errEl.textContent = 'Unable to recover PIN for this account.';
+          return;
+        }
+        const confirmReset = window.confirm('Do you want to set a new 6-digit admin PIN for your account?');
+        if (!confirmReset) return;
+        const newPin = window.prompt('Enter a new 6-digit PIN:', '');
+        if (!newPin) return;
+        const trimmed = String(newPin).trim();
+        if (!/^\d{6}$/.test(trimmed)) {
+          errEl.textContent = 'New PIN must be exactly 6 digits (numbers only).';
+          return;
+        }
+        try {
+          errEl.textContent = 'Updating PIN...';
+          await updateDoc(doc(db, 'users', userId), { pin: trimmed });
+          activeCorrectPin = trimmed;
+          errEl.textContent = 'PIN updated. Please use your new PIN to unlock.';
+          input.value = '';
+          input.focus();
+        } catch (e) {
+          console.error('Failed to update PIN:', e);
+          errEl.textContent = 'Failed to update PIN. Please try again.';
+        }
+      }
+
       btnSubmit.addEventListener('click', trySubmit);
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); trySubmit(); }
       });
+      if (btnForgot) {
+        btnForgot.addEventListener('click', handleForgotPin);
+      }
 
       setTimeout(() => { input.focus(); }, 50);
     });
@@ -243,7 +276,7 @@
 
       // Show overlay immediately; only on success do we initialize the dashboard.
       try {
-        await showPinOverlay(storedPin);
+        await showPinOverlay(storedPin, user.uid);
       } catch (_) {
         window.location.href = 'payroll.html';
         return;

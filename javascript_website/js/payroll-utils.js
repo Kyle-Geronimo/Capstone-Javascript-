@@ -187,8 +187,12 @@ export function computePayrollLine({
   // OPTIONAL: periodScaling (e.g. 15/30 for semi-monthly). If provided, statutory deductions are scaled by this factor.
   periodScaling = 1.0
   ,
-  // OPTIONAL: manualPagibig (PHP) — if provided, override computed employee pag-ibig deduction (employee share)
+  // OPTIONAL manual overrides in PHP amounts — when provided, they are used directly
+  // instead of any automatic/statutory formulas.
+  manualSss = null,
+  manualPhilhealth = null,
   manualPagibig = null,
+  manualStPeter = null,
   // OPTIONAL: sssOverride (object in PHP amounts) { employee, employer, total }
   // If provided, these values (PHP) will be used instead of computeSSSFromMonthlySalary
   sssOverride = null
@@ -249,48 +253,53 @@ export function computePayrollLine({
   // These should not be added to gross; they are included in the deductions.total instead.
 
   // ------------------ deductions ------------------
-  // If a monthlySalary is provided, compute statutory contributions from it
-  // and scale by periodScaling (1.0 = full monthly). Otherwise, fall back to
-  // simple-percentage approximations on the gross.
+  // Pure manual mode for statutory employee-side deductions:
+  // - If a manual value is provided, use it directly.
+  // - If left blank/null, treat as 0 (no automatic computation).
   let sssEmployee = 0, sssEmployer = 0, sssTotal = 0;
   let philEmployee = 0, philEmployer = 0, philTotal = 0;
   let pagibigEmployee = 0, pagibigEmployer = 0, pagibigTotal = 0;
 
-  // --- SSS: still based on monthly salary + SSS table/approx ---
-  if (monthlySalary !== null && monthlySalary !== undefined) {
-    if (sssOverride && (typeof sssOverride.employee === 'number' || typeof sssOverride.employer === 'number')) {
-      // use provided table values (assumed in PHP), scale and convert to cents
-      sssEmployee = Math.round(Number(sssOverride.employee || 0) * 100 * Number(periodScaling || 1));
-      sssEmployer = Math.round(Number(sssOverride.employer || 0) * 100 * Number(periodScaling || 1));
-      sssTotal = sssEmployee + sssEmployer;
-    } else {
-      const sss = computeSSSFromMonthlySalary(monthlySalary);
-      sssEmployee = Math.round(sss.employee * Number(periodScaling || 1));
-      sssEmployer = Math.round(sss.employer * Number(periodScaling || 1));
-      sssTotal = sssEmployee + sssEmployer;
-    }
-  } else {
-    // legacy simple-percent fallback on gross when no monthly base is available
-    sssEmployee = Math.round(grossCents * PAYROLL_CONFIG.sssPercent);
+  // SSS (employee)
+  if (manualSss !== null && manualSss !== undefined && manualSss !== '') {
+    sssEmployee = toCents(manualSss);
     sssEmployer = 0;
     sssTotal = sssEmployee;
+  } else {
+    sssEmployee = 0;
+    sssEmployer = 0;
+    sssTotal = 0;
   }
 
-  // --- PhilHealth (custom rule): 2.5% of 26 days * daily rate, employee-only ---
-  const dailyRateNum = Number(ratePerDay || 0);
-  const philhealthBasePHP = dailyRateNum * 26 * 0.025; // 2.5% of 26 days * ratePerDay
-  philEmployee = Math.round(philhealthBasePHP * 100);
-  philEmployer = 0;
-  philTotal = philEmployee;
+  // PhilHealth (employee)
+  if (manualPhilhealth !== null && manualPhilhealth !== undefined && manualPhilhealth !== '') {
+    philEmployee = toCents(manualPhilhealth);
+    philEmployer = 0;
+    philTotal = philEmployee;
+  } else {
+    philEmployee = 0;
+    philEmployer = 0;
+    philTotal = 0;
+  }
 
-  // --- Pag-IBIG (custom rule): fixed 200 PHP, employee-only ---
-  const pagibigPHP = 200;
-  pagibigEmployee = Math.round(pagibigPHP * 100);
-  pagibigEmployer = 0;
-  pagibigTotal = pagibigEmployee;
+  // Pag-IBIG (employee)
+  if (manualPagibig !== null && manualPagibig !== undefined && manualPagibig !== '') {
+    pagibigEmployee = toCents(manualPagibig);
+    pagibigEmployer = 0;
+    pagibigTotal = pagibigEmployee;
+  } else {
+    pagibigEmployee = 0;
+    pagibigEmployer = 0;
+    pagibigTotal = 0;
+  }
 
   // St. Peter Life Plan (employee-only)
-  const stPeter = Math.round(grossCents * Number(PAYROLL_CONFIG.stPeterPercent || 0));
+  let stPeter = 0;
+  if (manualStPeter !== null && manualStPeter !== undefined && manualStPeter !== '') {
+    stPeter = toCents(manualStPeter);
+  } else {
+    stPeter = Math.round(grossCents * Number(PAYROLL_CONFIG.stPeterPercent || 0));
+  }
 
   // Compose deductions object (employee-side amounts in cents)
   const totalDeductionCents =

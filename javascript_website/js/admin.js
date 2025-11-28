@@ -359,15 +359,69 @@ async function onApprove(e) {
 
     let adminPin = null;
     if ((reqData.role || 'employee') === 'admin') {
-      // Ask the approver to set a 6-digit PIN for this admin account
-      adminPin = prompt('Enter a 6-digit PIN for this admin (used to unlock QR Dashboard):', '');
-      if (!adminPin) {
-        alert('Admin PIN is required for admin accounts.');
-        return;
+      function showAdminPinOverlayForApproval() {
+        return new Promise((resolve, reject) => {
+          const overlay = document.createElement('div');
+          overlay.className = 'profile-edit-backdrop';
+
+          overlay.innerHTML = `
+            <div class="profile-edit-modal" style="max-width:360px;">
+              <h3>Set Admin PIN</h3>
+              <p style="margin-top:4px;margin-bottom:12px;font-size:0.9rem;color:#4b5563;">Enter a 6-digit PIN for this admin. This PIN will be used to unlock the QR Dashboard.</p>
+              <div class="form-group" style="margin-bottom:12px;">
+                <label for="approveAdminPin" class="form-label">Admin PIN</label>
+                <input id="approveAdminPin" type="password" maxlength="6" inputmode="numeric" autocomplete="off" class="form-control" style="font-size:1.3rem;letter-spacing:0.4em;text-align:center;" />
+                <div id="approveAdminPinError" style="min-height:18px;margin-top:6px;font-size:0.8rem;color:#b91c1c;"></div>
+              </div>
+              <div class="modal-actions">
+                <button type="button" class="action-btn secondary" id="approveAdminPinCancel">Cancel</button>
+                <button type="button" class="action-btn primary" id="approveAdminPinSubmit">Save PIN</button>
+              </div>
+            </div>
+          `;
+
+          document.body.appendChild(overlay);
+          const input = document.getElementById('approveAdminPin');
+          const errEl = document.getElementById('approveAdminPinError');
+          const btnCancel = document.getElementById('approveAdminPinCancel');
+          const btnSubmit = document.getElementById('approveAdminPinSubmit');
+
+          function cleanup(value) {
+            overlay.remove();
+            if (value === null) reject(new Error('PIN entry cancelled')); else resolve(value);
+          }
+
+          function trySubmit() {
+            let val = String(input.value || '').trim();
+            if (!/^\d{6}$/.test(val)) {
+              errEl.textContent = 'PIN must be exactly 6 digits (numbers only).';
+              return;
+            }
+            cleanup(val);
+          }
+
+          btnCancel.addEventListener('click', () => cleanup(null));
+          btnSubmit.addEventListener('click', trySubmit);
+          overlay.addEventListener('click', (evt) => {
+            if (evt.target === overlay) {
+              cleanup(null);
+            }
+          });
+          input.addEventListener('keydown', (evt) => {
+            if (evt.key === 'Enter') {
+              evt.preventDefault();
+              trySubmit();
+            }
+          });
+
+          setTimeout(() => { input.focus(); }, 30);
+        });
       }
-      adminPin = String(adminPin).trim();
-      if (!/^\d{6}$/.test(adminPin)) {
-        alert('PIN must be exactly 6 digits (numbers only).');
+
+      try {
+        adminPin = await showAdminPinOverlayForApproval();
+      } catch (_) {
+        alert('Admin PIN is required for admin accounts.');
         return;
       }
     }

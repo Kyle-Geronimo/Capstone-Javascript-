@@ -145,6 +145,14 @@ service cloud.firestore {
 		}
 
     // --------------------------------
+    // Guest Reservations (Chatbot dashboard)
+    // --------------------------------
+    match /guestReservations/{reservationId} {
+      // Admins and employees can read and manage reservations
+      allow read, create, update, delete: if isAdmin() || isEmployee();
+    }
+
+    // --------------------------------
     // Default deny everything else
     // --------------------------------
     match /{document=**} {

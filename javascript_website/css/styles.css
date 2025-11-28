@@ -4545,3 +4545,350 @@ main {
   opacity: 0.8;
 }
 
+/* -----------------------------
+   Chatbot page - Reservation dashboard layout
+   (Guest Records + Reports & Analytics)
+   ----------------------------- */
+
+.reservation-dashboard {
+  max-width: 1280px;
+  margin: 1.5rem auto 1.5rem;
+  padding: 0 10px;
+  display: block;
+}
+
+.guest-dashboard,
+.guest-reports-card {
+  background: #f9fbff;
+  border-radius: 14px;
+  padding: 1.1rem 1.25rem 1.25rem;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  border: 1px solid #e3edff;
+}
+
+.guest-header h2 {
+  margin: 0;
+  color: #123a80;
+  font-size: 1.25rem;
+}
+
+.guest-subtitle {
+  margin: 0.15rem 0 0.75rem;
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+.guest-summary-row,
+.guest-report-summary-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.guest-summary-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #e5edff;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+}
+
+.guest-summary-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b7280;
+}
+
+.guest-summary-value {
+  margin-top: 0.25rem;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.guest-card {
+  margin-top: 1rem;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 0.9rem 1rem 1rem;
+  border: 1px solid #e5edff;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.04);
+}
+
+.guest-card h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  color: #123a80;
+}
+
+.guest-card-sub {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.guest-card-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.guest-filters,
+.guest-report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.guest-filter-input {
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid #d0ddff;
+  background: #ffffff;
+  font-size: 0.85rem;
+  min-width: 130px;
+}
+
+.guest-filter-input::placeholder {
+  color: #9ca3af;
+}
+
+.guest-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.guest-form-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.guest-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.guest-form-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.guest-form-group input,
+.guest-form-group select {
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid #d0ddff;
+  font-size: 0.9rem;
+}
+
+/* Nudge dropdowns slightly down so rows/columns align nicely */
+.guest-form-group select#guestStatus,
+.guest-form-group select#guestHotel {
+  margin-top: 0.4rem;
+}
+
+.guest-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.guest-table {
+  width: 100%;
+}
+
+.guest-table th,
+.guest-table td {
+  white-space: nowrap;
+}
+
+.guest-table th {
+  background: #f2f5ff;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #4b5563;
+}
+
+.guest-table td button {
+  padding: 4px 8px;
+  margin-right: 4px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.guest-table td button:hover {
+  background: #e5f2ff;
+  border-color: #bfdbfe;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.status-inhouse {
+  background: #e0fbea;
+  color: #166534;
+}
+
+.status-reserved {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-checkedout {
+  background: #e0edff;
+  color: #1d4ed8;
+}
+
+.guest-report-table-wrap h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  color: #111827;
+}
+
+.guest-message {
+  margin: 0.35rem 0 0.35rem;
+  font-size: 0.85rem;
+  min-height: 1.1rem;
+}
+
+.guest-message--success {
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #ecfdf5;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.guest-message--error {
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.guest-message--confirm {
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: #f9fafb;
+  color: #111827;
+  border: 1px solid #e5e7eb;
+}
+
+.guest-message-actions {
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+.guest-message-btn {
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.guest-message-btn--danger {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.guest-message-btn:hover {
+  background: #e5f2ff;
+  border-color: #bfdbfe;
+}
+
+.guest-delete-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+}
+
+.guest-delete-modal-overlay.is-open {
+  display: flex;
+}
+
+.guest-delete-modal {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 1.25rem 1.5rem 1.2rem;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+  min-width: 280px;
+  max-width: 360px;
+}
+
+.guest-delete-title {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.guest-delete-text {
+  margin: 0 0 0.85rem;
+  font-size: 0.9rem;
+  color: #4b5563;
+}
+
+.guest-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+@media (max-width: 960px) {
+  .reservation-dashboard {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .guest-form-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .reservation-dashboard {
+    padding: 0 12px;
+  }
+
+  .guest-summary-row,
+  .guest-report-summary-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
