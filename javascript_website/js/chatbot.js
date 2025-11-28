@@ -1369,13 +1369,12 @@ export function initReservationDashboard() {
         return new Date(d.getFullYear(), d.getMonth(), d.getDate());
     };
 
-    const fmtDate = (d) => (d ? d.toISOString().slice(0, 10) : '');
-
-    const statusBadgeClass = (s) => {
-        if (s === 'in-house') return 'status-badge status-inhouse';
-        if (s === 'reserved') return 'status-badge status-reserved';
-        if (s === 'checked-out') return 'status-badge status-checkedout';
-        return 'status-badge';
+const fmtDate = (d) => {
+        if (!d) return '';
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
     };
 
     const recomputeSummary = () => {
