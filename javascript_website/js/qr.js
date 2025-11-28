@@ -15,7 +15,7 @@ import {
 import { evaluateForUser } from './payroll-utils.js';
 
 // API base (matches pattern used in admin.js)
-const API_BASE = (window.API_BASE && window.API_BASE.replace(/\/$/, '')) || 'http://localhost:3000';
+const API_BASE = (window.API_BASE && window.API_BASE.replace(/\/$/, '')) || 'https://mariners-hotellink.com';
 
 // -------------------- GENERATOR UI refs --------------------
 const createForm = document.getElementById('createForm');
