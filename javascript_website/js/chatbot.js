@@ -1275,6 +1275,16 @@ export function initReservationDashboard() {
                 </div>
             </div>
         </div>
+
+        <div id="guestOverlapModal" class="guest-delete-modal-overlay" hidden>
+            <div class="guest-delete-modal">
+                <h4 class="guest-delete-title">Room already occupied</h4>
+                <p class="guest-delete-text" id="guestOverlapText">Guest already has occupied the room in that timeframe.</p>
+                <div class="guest-delete-actions">
+                    <button type="button" id="guestOverlapClose" class="guest-message-btn">Close</button>
+                </div>
+            </div>
+        </div>
     `;
 
     const reservationsCol = collection(db, 'guestReservations');
@@ -1312,6 +1322,10 @@ export function initReservationDashboard() {
     const deleteConfirmBtn = document.getElementById('guestDeleteConfirm');
     const deleteCancelBtn = document.getElementById('guestDeleteCancel');
     let pendingDeleteId = null;
+
+    const overlapModal = document.getElementById('guestOverlapModal');
+    const overlapTextEl = document.getElementById('guestOverlapText');
+    const overlapCloseBtn = document.getElementById('guestOverlapClose');
 
     const setGuestMessage = (text, type = 'info') => {
         if (!guestMessageEl) return;
@@ -1362,6 +1376,24 @@ export function initReservationDashboard() {
         }
     });
 
+    const openOverlapModal = (message) => {
+        if (!overlapModal || !overlapTextEl) return;
+        overlapTextEl.textContent = message || 'Guest already has occupied the room in that timeframe.';
+        overlapModal.hidden = false;
+        overlapModal.classList.add('is-open');
+    };
+
+    const closeOverlapModal = () => {
+        if (!overlapModal) return;
+        overlapModal.hidden = true;
+        overlapModal.classList.remove('is-open');
+    };
+
+    overlapCloseBtn?.addEventListener('click', (e) => {
+        e.preventDefault();
+        closeOverlapModal();
+    });
+
     const asDateOnly = (val) => {
         if (!val) return null;
         const d = val.toDate ? val.toDate() : (val instanceof Date ? val : new Date(val));
@@ -1402,6 +1434,23 @@ export function initReservationDashboard() {
         if (inHouseEl) inHouseEl.textContent = String(inHouse);
         if (checkedOutEl) checkedOutEl.textContent = String(checked);
         if (upcomingEl) upcomingEl.textContent = String(upcoming);
+    };
+
+    const hasOverlapForRoom = (hotel, room, checkInDate, checkOutDate, ignoreId = null) => {
+        if (!hotel || !room || !checkInDate || !checkOutDate) return false;
+        const newStart = asDateOnly(checkInDate);
+        const newEnd = asDateOnly(checkOutDate);
+        if (!newStart || !newEnd) return false;
+        return reservations.some(r => {
+            if (!r) return false;
+            if (ignoreId && r.id === ignoreId) return false;
+            if ((r.hotel || '') !== hotel) return false;
+            if ((r.room || '') !== room) return false;
+            const existingStart = asDateOnly(r.checkIn);
+            const existingEnd = asDateOnly(r.checkOut);
+            if (!existingStart || !existingEnd) return false;
+            return existingStart <= newEnd && existingEnd >= newStart;
+        });
     };
 
     const renderGuestTable = () => {
@@ -1541,6 +1590,13 @@ export function initReservationDashboard() {
             setGuestMessage('Check-out date cannot be before check-in date.', 'error');
             return;
         }
+        const existing = reservationIdInput.value;
+        if (hasOverlapForRoom(hotel, room, ci, co, existing || null)) {
+            const msg = 'Guest already has occupied the room in that timeframe.';
+            setGuestMessage(msg, 'error');
+            openOverlapModal(msg);
+            return;
+        }
         const payload = {
             guestName: name,
             room,
@@ -1551,7 +1607,6 @@ export function initReservationDashboard() {
             updatedAt: serverTimestamp(),
             userId: auth.currentUser?.uid || null
         };
-        const existing = reservationIdInput.value;
         try {
             if (existing) {
                 await updateDoc(doc(db, 'guestReservations', existing), payload);
