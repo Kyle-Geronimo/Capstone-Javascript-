@@ -12,7 +12,7 @@
   <header>
     <div class="container">
       <h1>LinkHotel</h1>
-      <nav>
+      <nav style="visibility:hidden;">
         <a href="#home" class="nav-btn public-only">Home</a>
         <a href="#about" class="nav-btn public-only">About Us</a>
         <a href="#contacts" class="nav-btn public-only">Contacts</a>
@@ -20,9 +20,10 @@
         <div class="user-nav" style="display:none;">
           <a href="#home" class="nav-btn restricted">Home</a>
           <a href="pages/chatbot.html" class="nav-btn restricted">Chatbot Data</a>
+          <a href="pages/dashboard.html" class="nav-btn restricted">Dashboard</a>
+          <a href="pages/admin.html" class="nav-btn restricted admin-only" style="display:none;">Admin</a>
+          <a href="pages/payroll.html" class="nav-btn restricted admin-only" style="display:none;">Payroll</a>
           <a href="pages/profile.html" class="nav-btn restricted">Profile</a>
-          <a href="pages/admin.html" class="nav-btn restricted admin-only">Admin</a>
-          <a href="pages/payroll.html" class="nav-btn restricted admin-only">Payroll</a>
           <a href="#" id="logout-btn" class="nav-btn restricted">Logout</a>
         </div>
       </nav>
@@ -145,27 +146,7 @@
       </div>
     </section>
 
-    <!-- LOGIN SHORTCUTS (STAFF / ADMIN ENTRY) -->
-    <section class="home-quicklinks" id="login">
-      <div class="container">
-        <div class="quicklinks-row">
-
-          <a class="quicklink card" href="pages/login.html">
-            <strong>Sign In</strong>
-            <span class="muted">Access staff portal</span>
-          </a>
-          <a class="quicklink card" href="pages/signup.html">
-            <strong>Create account</strong>
-            <span class="muted">Request access</span>
-          </a>
-          <a class="quicklink card restricted admin-only" href="pages/admin.html" style="display:none;">
-            <strong>Admin</strong>
-            <span class="muted">Manage users & settings</span>
-          </a>
-        </div>
-      </div>
-    </section>
-
+   
     <!-- Floating Chat Widget (now powered by in-app chatbot) -->
     <div class="chat-widget" aria-live="polite">
       <div class="chat-widget-panel" id="chat-widget-panel">
@@ -268,20 +249,37 @@
       const publicNavElements = document.querySelectorAll('.nav-btn.public-only');
       const heroCtas = document.querySelector('.hero-ctas');
       const quicklinks = document.querySelector('.quicklinks-row');
+      const aboutSection = document.getElementById('about');
+      const contactsSection = document.getElementById('contacts');
+      const loginSection = document.getElementById('login');
       
       if (user) {
         publicNavElements.forEach(el => el.style.display = 'none');
         if (heroCtas) heroCtas.style.display = 'none';
         
-        const publicQuicklinks = quicklinks.querySelectorAll('a:not(.restricted)');
-        publicQuicklinks.forEach(el => el.style.display = 'none');
+        if (quicklinks) {
+          const publicQuicklinks = quicklinks.querySelectorAll('a:not(.restricted)');
+          publicQuicklinks.forEach(el => el.style.display = 'none');
+        }
+
+        // Hide public sections for logged-in staff (employee/admin)
+        if (aboutSection) aboutSection.style.display = 'none';
+        if (contactsSection) contactsSection.style.display = 'none';
+        if (loginSection) loginSection.style.display = 'none';
         
       } else {
         publicNavElements.forEach(el => el.style.display = '');
         if (heroCtas) heroCtas.style.display = 'flex';
         
-        const publicQuicklinks = quicklinks.querySelectorAll('a:not(.restricted)');
-        publicQuicklinks.forEach(el => el.style.display = 'flex');
+        if (quicklinks) {
+          const publicQuicklinks = quicklinks.querySelectorAll('a:not(.restricted)');
+          publicQuicklinks.forEach(el => el.style.display = 'flex');
+        }
+
+        // Show public sections again for customers
+        if (aboutSection) aboutSection.style.display = '';
+        if (contactsSection) contactsSection.style.display = '';
+        if (loginSection) loginSection.style.display = '';
       }
     };
     // --- END PREVIOUS LOGIC ---
@@ -363,7 +361,7 @@
       chatMessages.scrollTop = chatMessages.scrollHeight;
     };
 
-    const CHAT_API_BASE = window.API_BASE || 'https://mariners-chatbot.cloud';
+    const CHAT_API_BASE = window.API_BASE || 'http://localhost:4000';
 
     const sendToChatbot = async (message) => {
       try {

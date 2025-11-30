@@ -22,6 +22,8 @@ export async function updateNavVisibility() {
       nav.querySelectorAll('.public-only').forEach(link => {
         link.style.display = 'inline-block';
       });
+      // Reveal nav after applying visibility rules
+      nav.style.visibility = 'visible';
       return;
     }
 
@@ -51,8 +53,13 @@ export async function updateNavVisibility() {
       }
     });
 
+    // Reveal nav after applying visibility rules
+    nav.style.visibility = 'visible';
+
   } catch (err) {
     console.error('Navigation visibility error:', err);
+    // In case of error, at least show whatever nav is there so UI isn't blank
+    nav.style.visibility = 'visible';
   }
 }
 

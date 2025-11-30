@@ -4,22 +4,58 @@ import { auth, db } from './firebase-config.js';
 import { getSssTable, lookupSssContribution } from './sss-table.js';
 import {
   collection, getDocs, getDoc, query, where, orderBy, addDoc, doc, setDoc, serverTimestamp, Timestamp, onSnapshot, limit, documentId,
-  updateDoc, arrayUnion, arrayRemove
+  updateDoc, deleteDoc, arrayUnion, arrayRemove
 } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
 
 // UI elements
 const loadUsersBtn = document.getElementById('loadUsersBtn');
 const calculateBtn = document.getElementById('calculateBtn');
 const saveRunBtn = document.getElementById('saveRunBtn');
-const exportCsvBtn = document.getElementById('exportCsvBtn');
+const exportPdfBtn = document.getElementById('exportPdfBtn');
 const payrollBody = document.getElementById('payrollBody');
 const rowsCountEl = document.getElementById('rowsCount');
 const statusEl = document.getElementById('status');
 const payrollLoadingOverlay = document.getElementById('payrollLoadingOverlay');
 const payrollLoadingTextEl = document.getElementById('payrollLoadingText');
 
+// Payroll table search + pagination
+const payrollSearchInput = document.getElementById('payrollSearch');
+const payrollViewMoreBtn = document.getElementById('payrollViewMore');
+const payrollViewLessBtn = document.getElementById('payrollViewLess');
+
+// Attendance dashboard elements
+const attendanceBody = document.getElementById('attendanceBody');
+const attendanceRowsCountEl = document.getElementById('attendanceRowsCount');
+const attendanceSearchInput = document.getElementById('attendanceSearch');
+const attendanceViewMoreBtn = document.getElementById('attendanceViewMore');
+const attendanceViewLessBtn = document.getElementById('attendanceViewLess');
+const attendanceRangeSelect = document.getElementById('attendanceDateFilter');
+
+// Attendance modal elements
+const attendanceModalBackdrop = document.getElementById('attendanceModalBackdrop');
+const attendanceModalTitle = document.getElementById('attendanceModalTitle');
+const attendanceModalMessage = document.getElementById('attendanceModalMessage');
+const attendanceModalEditFields = document.getElementById('attendanceModalEditFields');
+const attendanceEditTimeIn = document.getElementById('attendanceEditTimeIn');
+const attendanceEditTimeOut = document.getElementById('attendanceEditTimeOut');
+const attendanceModalCancel = document.getElementById('attendanceModalCancel');
+const attendanceModalPrimary = document.getElementById('attendanceModalPrimary');
+
 let usersList = [];
 let rows = [];
+let filteredRows = [];
+let payrollVisibleCount = 5;
+const PAYROLL_PAGE_STEP = 5;
+
+let attendanceRows = [];
+let filteredAttendanceRows = [];
+let attendanceVisibleCount = 5;
+const ATTENDANCE_PAGE_STEP = 5;
+
+let attendanceModalState = {
+  mode: null, // 'edit' | 'delete'
+  rowId: null
+};
 // in-memory SSS table payload (from config/sssContributionTable)
 let sssTablePayload = null;
 
@@ -44,6 +80,129 @@ function findSssFromPayload(monthlySalary) {
     console.warn('findSssFromPayload failed', e);
     return null;
   }
+}
+
+// -----------------------------
+// Attendance modal helpers
+// -----------------------------
+function closeAttendanceModal() {
+  if (!attendanceModalBackdrop) return;
+  attendanceModalBackdrop.classList.add('hidden');
+  attendanceModalState = { mode: null, rowId: null };
+}
+
+function openAttendanceModalEdit(row) {
+  if (!attendanceModalBackdrop || !attendanceModalTitle || !attendanceModalMessage) return;
+  attendanceModalState = { mode: 'edit', rowId: row.id };
+  attendanceModalTitle.textContent = 'Edit attendance';
+  attendanceModalMessage.textContent = `Update time-in and time-out for ${row.username || row.userId} on ${row.dayKey}.`;
+  if (attendanceModalEditFields) attendanceModalEditFields.style.display = '';
+
+  if (attendanceEditTimeIn) {
+    attendanceEditTimeIn.value = row.timeIn ? new Date(row.timeIn).toISOString().slice(0,16) : '';
+  }
+  if (attendanceEditTimeOut) {
+    attendanceEditTimeOut.value = row.timeOut ? new Date(row.timeOut).toISOString().slice(0,16) : '';
+  }
+
+  if (attendanceModalPrimary) attendanceModalPrimary.textContent = 'Save';
+
+  attendanceModalBackdrop.classList.remove('hidden');
+}
+
+function openAttendanceModalDelete(rowId) {
+  if (!attendanceModalBackdrop || !attendanceModalTitle || !attendanceModalMessage) return;
+  const row = attendanceRows.find(r => r.id === rowId);
+  attendanceModalState = { mode: 'delete', rowId };
+  attendanceModalTitle.textContent = 'Delete attendance';
+  attendanceModalMessage.textContent = `Delete attendance for ${row?.username || row?.userId || 'this user'} on ${row?.dayKey || ''}? This cannot be undone.`;
+  if (attendanceModalEditFields) attendanceModalEditFields.style.display = 'none';
+  if (attendanceModalPrimary) attendanceModalPrimary.textContent = 'Delete';
+  attendanceModalBackdrop.classList.remove('hidden');
+}
+
+if (attendanceModalCancel) {
+  attendanceModalCancel.addEventListener('click', () => {
+    closeAttendanceModal();
+  });
+}
+
+if (attendanceModalPrimary) {
+  attendanceModalPrimary.addEventListener('click', async () => {
+    const state = attendanceModalState;
+    if (!state || !state.mode || !state.rowId) {
+      closeAttendanceModal();
+      return;
+    }
+
+    const row = attendanceRows.find(r => r.id === state.rowId);
+    if (!row) {
+      closeAttendanceModal();
+      return;
+    }
+
+    try {
+      if (state.mode === 'delete') {
+        const deletes = [];
+        if (row.timeInDocId) {
+          deletes.push(deleteDoc(doc(db, 'attendance', row.timeInDocId)));
+        }
+        if (row.timeOutDocId && row.timeOutDocId !== row.timeInDocId) {
+          deletes.push(deleteDoc(doc(db, 'attendance', row.timeOutDocId)));
+        }
+        if (deletes.length) {
+          await Promise.all(deletes);
+        }
+        attendanceRows = attendanceRows.filter(r => r.id !== row.id);
+        renderAttendanceTable();
+        closeAttendanceModal();
+        return;
+      }
+
+      if (state.mode === 'edit') {
+        const inVal = attendanceEditTimeIn && attendanceEditTimeIn.value ? attendanceEditTimeIn.value : '';
+        const outVal = attendanceEditTimeOut && attendanceEditTimeOut.value ? attendanceEditTimeOut.value : '';
+
+        if (inVal) {
+          const parsedIn = new Date(inVal);
+          if (Number.isNaN(parsedIn.getTime())) {
+            alert('Invalid TIME-IN value.');
+            return;
+          }
+          const isoIn = parsedIn.toISOString();
+          if (row.timeInDocId) {
+            await updateDoc(doc(db, 'attendance', row.timeInDocId), {
+              recordedTime: isoIn,
+              rawTime: isoIn
+            });
+          }
+          row.timeIn = isoIn;
+        }
+
+        if (outVal) {
+          const parsedOut = new Date(outVal);
+          if (Number.isNaN(parsedOut.getTime())) {
+            alert('Invalid TIME-OUT value.');
+            return;
+          }
+          const isoOut = parsedOut.toISOString();
+          if (row.timeOutDocId) {
+            await updateDoc(doc(db, 'attendance', row.timeOutDocId), {
+              recordedTime: isoOut,
+              rawTime: isoOut
+            });
+          }
+          row.timeOut = isoOut;
+        }
+
+        renderAttendanceTable();
+        closeAttendanceModal();
+      }
+    } catch (err) {
+      console.error('attendance modal primary action failed', err);
+      alert('Failed to update attendance record.');
+    }
+  });
 }
 
 // --- Specific XLSX parser for 2025 Tabulation format ---
@@ -820,11 +979,11 @@ async function initLivePayroll() {
   }
 
   // initial attempt (if date inputs already have values)
-  maybeLoadAttendance().catch(e => console.warn('initial attendance load failed', e));
+  const AUTO_ATTENDANCE_ON_CHANGE = false;
 
   // watch for changes to period inputs (auto reload)
-  if (periodStartEl) periodStartEl.addEventListener('change', maybeLoadAttendance);
-  if (periodEndEl) periodEndEl.addEventListener('change', maybeLoadAttendance);
+  if (AUTO_ATTENDANCE_ON_CHANGE && periodStartEl) periodStartEl.addEventListener('change', maybeLoadAttendance);
+  if (AUTO_ATTENDANCE_ON_CHANGE && periodEndEl) periodEndEl.addEventListener('change', maybeLoadAttendance);
 
   // also expose a public refresh hook if you want to force reload programmatically
   window.payrollRefresh = async () => {
@@ -1322,11 +1481,24 @@ function formatDateForInput(v) {
   return '';
 }
 
+function getFilteredPayrollRows() {
+  if (!Array.isArray(rows)) return [];
+  const term = (payrollSearchInput && payrollSearchInput.value || '').trim().toLowerCase();
+  if (!term) return rows.slice();
+  return rows.filter(r => {
+    const u = (r.username || '').toString().toLowerCase();
+    return u.includes(term);
+  });
+}
+
 function renderTable() {
   if (!payrollBody) return;
   payrollBody.innerHTML = '';
 
-  rows.forEach((r, idx) => {
+  filteredRows = getFilteredPayrollRows();
+  const slice = filteredRows.slice(0, payrollVisibleCount);
+
+  slice.forEach((r, idx) => {
     // helper to get auto-calculated placeholders
     const auto = r._calc || {};
     const breakdown = (auto.deductions && auto.deductions.breakdown) ? auto.deductions.breakdown : {};
@@ -1350,6 +1522,14 @@ function renderTable() {
       return (v === undefined || v === null) ? '' : String(v);
     };
 
+    // keep Basic Total auto-calculated from Rate * Days unless the user has manually overridden it
+    if (!r.basicTotalManual) {
+      const rp = Number(r.ratePerDay || 0);
+      const d  = Number(r.daysWorked || 0);
+      r.basicTotal = (rp && d) ? (rp * d) : 0;
+    }
+    const basicDisplay = (r.basicTotal === null || r.basicTotal === undefined) ? '' : fmt(r.basicTotal);
+
     const tr = document.createElement('tr');
     tr.dataset.id = r.userId;
 
@@ -1361,6 +1541,9 @@ function renderTable() {
 
       <!-- Days: default from attendance but now editable by admin -->
       <td><input class="input-small" data-field="daysWorked" data-id="${r.userId}" value="${escapeHtml(fmt(r.daysWorked || auto.daysWorked || ''))}" placeholder="${escapeHtml(fmt(r.daysWorked || auto.daysWorked || ''))}" /></td>
+
+      <!-- Basic Total: auto Rate * Days but editable -->
+      <td><input class="input-small" data-field="basicTotal" data-id="${r.userId}" value="${escapeHtml(basicDisplay)}" placeholder="${escapeHtml(basicDisplay)}" /></td>
 
       <td><input class="input-small" data-field="hoursWorked" data-id="${r.userId}" value="${escapeHtml(fmt(r.hoursWorked || auto.hoursWorked || ''))}" placeholder="${escapeHtml(fmt(r.hoursWorked || auto.hoursWorked || ''))}" /></td>
 
@@ -1400,7 +1583,6 @@ function renderTable() {
 
       <td><input data-field="note" data-id="${r.userId}" value="${escapeHtml(val('note'))}" placeholder="${escapeHtml(r.note || '')}" /></td>
     `;
-
     payrollBody.appendChild(tr);
   });
 
@@ -1411,11 +1593,12 @@ function renderTable() {
       const field = inp.dataset.field;
       const row = rows.find(x => x.userId === id);
       if (!row) return;
+
       // numeric fields list
       const numericFields = [
         // Editable numeric inputs; gross/deductions/net remain computed-only
         'ratePerDay',
-        'daysWorked','hoursWorked','ndHours','ndOtHours','otHours',
+        'daysWorked','basicTotal','hoursWorked','ndHours','ndOtHours','otHours',
         'regularHolidayHours','specialHolidayHours',
         'sss','philhealth','pagibig','stPeter',
         'sssSalaryLoan','sssCalamityLoan','hdmfSalaryLoan','hdmfCalamityLoan','cashAdvance','credit',
@@ -1426,6 +1609,18 @@ function renderTable() {
       if (numericFields.includes(field)) {
         const parsed = inp.value === '' ? null : Number(inp.value);
         row[field] = parsed;
+
+        // Keep Basic Total auto-calculated when Rate or Days change, unless user overrode it.
+        if ((field === 'ratePerDay' || field === 'daysWorked') && !row.basicTotalManual) {
+          const rp = Number(row.ratePerDay || 0);
+          const d  = Number(row.daysWorked || 0);
+          row.basicTotal = (rp && d) ? (rp * d) : 0;
+        }
+
+        // Mark Basic Total as manual when the user edits it directly
+        if (field === 'basicTotal') {
+          row.basicTotalManual = (parsed !== null && !Number.isNaN(parsed));
+        }
 
         // Persist ratePerDay edits directly onto the user document so they
         // remain permanent across payroll runs and page refreshes.
@@ -1447,7 +1642,7 @@ function renderTable() {
   });
 
   if (typeof rowsCountEl !== 'undefined' && rowsCountEl && 'textContent' in rowsCountEl) {
-    rowsCountEl.textContent = String(rows.length);
+    rowsCountEl.textContent = String(filteredRows.length || rows.length || 0);
   }
 }
 
@@ -1487,50 +1682,44 @@ async function loadUsersAndAttendance() {
     rows = usersList.map(u => {
       const savedLine = (latestLines && latestLines.has(u.userId)) ? latestLines.get(u.userId) : null;
       return {
-      userId: u.userId || u.id,
-      username: u.username || u.displayName || u.email || '',
-      role: u.role || '',
-      shift: u.shift || '',
-      // prefer saved rate from most recent payroll run, else fall back to user base/rate
-      ratePerDay: pickRateForUser(latestRates, (u.userId || u.id), u),
-      daysWorked: 0,
-      hoursWorked: 0,
-      ndHours: 0,
-      ndOtHours: 0,
-      otHours: 0,
-      regularHolidayHours: 0,
-      specialHolidayHours: 0,
-      // UI fields / overrides (empty initially)
-      sss: null,
-      philhealth: null,
-      pagibig: null,
-      stPeter: null,
-      sssSalaryLoan: Number((savedLine && savedLine['sss salary loan']) || 0),
-      sssCalamityLoan: Number((savedLine && savedLine['sss calamity loan']) || 0),
-      hdmfSalaryLoan: Number((savedLine && savedLine['hdmf salary loan']) || 0),
-      hdmfCalamityLoan: Number((savedLine && savedLine['hdmf calamity loan']) || 0),
-      cashAdvance: Number((savedLine && savedLine.cashAdvance) || 0),
-      utLateHours: Number((savedLine && savedLine['ut/late']) || 0),
-      utLateAmount: Number((savedLine && savedLine['ut/late amount']) || 0),
-      // seed note from most recent run line if present, else use user doc note
-      note: ((savedLine && savedLine.note) ? savedLine.note : (u.note || '')),
-      _manualGross: null,
-      _manualDeductions: null,
-      _manualNet: null,
-      adjustmentsCents: 0
-    };
+        userId: u.userId || u.id,
+        username: u.username || u.displayName || u.email || '',
+        role: u.role || '',
+        shift: u.shift || '',
+        // prefer saved rate from most recent payroll run, else fall back to user base/rate
+        ratePerDay: pickRateForUser(latestRates, (u.userId || u.id), u),
+        daysWorked: 0,
+        // Basic Total: auto Rate * Days unless manually overridden
+        basicTotal: null,
+        basicTotalManual: false,
+        hoursWorked: 0,
+        ndHours: 0,
+        ndOtHours: 0,
+        otHours: 0,
+        regularHolidayHours: 0,
+        specialHolidayHours: 0,
+        // UI fields / overrides (empty initially)
+        sss: null,
+        philhealth: null,
+        pagibig: null,
+        stPeter: null,
+        sssSalaryLoan: Number((savedLine && savedLine['sss salary loan']) || 0),
+        sssCalamityLoan: Number((savedLine && savedLine['sss calamity loan']) || 0),
+        hdmfSalaryLoan: Number((savedLine && savedLine['hdmf salary loan']) || 0),
+        hdmfCalamityLoan: Number((savedLine && savedLine['hdmf calamity loan']) || 0),
+        cashAdvance: Number((savedLine && savedLine.cashAdvance) || 0),
+        utLateHours: Number((savedLine && savedLine['ut/late']) || 0),
+        utLateAmount: Number((savedLine && savedLine['ut/late amount']) || 0),
+        // seed note from most recent run line if present, else use user doc note
+        note: ((savedLine && savedLine.note) ? savedLine.note : (u.note || '')),
+        _manualGross: null,
+        _manualDeductions: null,
+        _manualNet: null,
+        adjustmentsCents: 0
+      };
     });
 
-    // if we have a recent run meta, populate the period inputs
-    try {
-      if (latestRunMeta) {
-        const ps = document.getElementById('periodStart');
-        const pe = document.getElementById('periodEnd');
-        if (ps && latestRunMeta.periodStart) ps.value = formatDateForInput(latestRunMeta.periodStart);
-        if (pe && latestRunMeta.periodEnd) pe.value = formatDateForInput(latestRunMeta.periodEnd);
-      }
-    } catch (e) { console.warn('failed to set period from latest run', e); }
-
+    // Dates are left empty by default; admin chooses the desired period manually.
     renderTable();
     setStatus(`Loaded ${rows.length} users.`);
   } catch (err) {
@@ -1996,68 +2185,83 @@ async function savePayrollRun() {
   }
 }
 
-// Export CSV (literal field names)
-function exportCsv() {
-  const periodStart = (document.getElementById('periodStart') && document.getElementById('periodStart').value) || '';
-  const periodEnd = (document.getElementById('periodEnd') && document.getElementById('periodEnd').value) || '';
+function exportPayrollAsPdf() {
+  try {
+    const table = document.getElementById('payrollTable');
+    if (!table) {
+      setStatus('Payroll table not found for export.', true);
+      return;
+    }
 
-  const header = [
-    'userId','username','role','ratePerDay','ratePerHour','daysWorked','hoursWorked','ngHours','otHours',
-    'regularHolidayHours','specialHolidayHours','grossPay','netPay',
-    'sss','pag-ibig','philhealth','st.peter',
-    'sss salary loan','sss calamity loan','hdmf salary loan','hdmf calamity loan','cashAdvance',
-    'ut/late','ut/late amount'
-  ];
-  const rowsData = rows.map(r => {
-    const breakdown = (r._calc && r._calc.deductions && r._calc.deductions.breakdown) ? r._calc.deductions.breakdown : {};
-    const sssEmp = breakdown.sss_employee ?? breakdown.sss ?? '';
-    const philEmp = breakdown.phil_employee ?? breakdown.philhealth_employee ?? '';
-    const pagibigEmp = breakdown.pagibig_employee ?? '';
-    // no manualEdits fields — use cashAdvance instead
-    return [
-      r.userId || '',
-      r.username || '',
-      r.role || '',
-      r.ratePerDay || '',
-      r.ratePerHour || '',
-      r.daysWorked || 0,
-      r.hoursWorked || 0,
-      r.ngHours || '',
-      r.otHours || 0,
-      r.regularHolidayHours || 0,
-      r.specialHolidayHours || 0,
-      (r._manualGross !== null && r._manualGross !== undefined) ? r._manualGross : (r._calc ? r._calc.gross : ''),
-      (r._manualNet !== null && r._manualNet !== undefined) ? r._manualNet : (r._calc ? r._calc.net : ''),
-      (r.sss !== null && r.sss !== undefined) ? r.sss : sssEmp,
-      (r.pagibig !== null && r.pagibig !== undefined) ? r.pagibig : pagibigEmp,
-      (r.philhealth !== null && r.philhealth !== undefined) ? r.philhealth : philEmp,
-      (r.stPeter !== null && r.stPeter !== undefined) ? r.stPeter : (breakdown['st.peter'] ?? breakdown.st_peter ?? ''),
-      r.sssSalaryLoan || 0,
-      r.sssCalamityLoan || 0,
-      r.hdmfSalaryLoan || 0,
-      r.hdmfCalamityLoan || 0,
-      r.cashAdvance || 0,
-      r.utLateHours || 0,
-      r.utLateAmount || 0
-    ].map(cell => `"${String(cell).replace(/"/g,'""')}"`).join(',');
-  });
+    const periodStart = (document.getElementById('periodStart') && document.getElementById('periodStart').value) || '';
+    const periodEnd = (document.getElementById('periodEnd') && document.getElementById('periodEnd').value) || '';
+    const rangeLabel = periodStart && periodEnd ? `${periodStart} - ${periodEnd}` : 'Current Payroll';
 
-  const csv = [ header.join(','), rowsData ].join('\n');
-  // Prepend period metadata as a comment line (CSV viewers ignore leading # comment)
-  const metaLine = `# periodStart=${periodStart},periodEnd=${periodEnd}`;
-  const fullCsv = [metaLine, header.join(','), rowsData].join('\n');
+    const jsPdfGlobal = window.jspdf || window.jspdf_umd || window.jspdfUmd || {};
+    const JsPDFCtor = jsPdfGlobal.jsPDF || jsPdfGlobal.default || window.jsPDF;
+    if (!JsPDFCtor) {
+      setStatus('PDF library (jsPDF) not loaded.', true);
+      return;
+    }
 
-  const blob = new Blob([fullCsv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  // include the period in filename when available
-  const datePart = new Date().toISOString().slice(0,10);
-  const rangePart = periodStart && periodEnd ? `${periodStart}_to_${periodEnd}` : `${datePart}`;
-  a.href = url;
-  a.download = `payroll-${rangePart}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-  setStatus('CSV exported with period metadata.');
+    const doc = new JsPDFCtor({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+
+    const headerCells = Array.from(table.querySelectorAll('thead tr th')).map(th => th.textContent.trim());
+    const bodyRows = Array.from(table.querySelectorAll('tbody tr')).map(tr => {
+      const cells = Array.from(tr.querySelectorAll('td'));
+      return cells.map(td => {
+        const input = td.querySelector('input');
+        if (input) return (input.value || '').toString().trim();
+        return (td.textContent || '').toString().trim();
+      });
+    });
+
+    const firstLineY = 36;
+    doc.setFontSize(14);
+    doc.text('Payroll', 40, firstLineY);
+    doc.setFontSize(10);
+    doc.text(`Period: ${rangeLabel}`, 40, firstLineY + 16);
+
+    const tableOpts = {
+      head: [headerCells],
+      body: bodyRows,
+      startY: firstLineY + 28,
+      theme: 'grid',
+      styles: {
+        fontSize: 9,
+        cellPadding: 3,
+        valign: 'middle',
+        halign: 'center'
+      },
+      headStyles: {
+        fillColor: [37, 99, 235],
+        textColor: 255,
+        fontStyle: 'bold'
+      },
+      alternateRowStyles: {
+        fillColor: [245, 248, 255]
+      },
+      margin: { left: 24, right: 24 }
+    };
+
+    if (typeof doc.autoTable === 'function') {
+      doc.autoTable(tableOpts);
+    } else if (typeof window.jspdfAutoTable === 'function') {
+      window.jspdfAutoTable(doc, tableOpts);
+    } else {
+      setStatus('PDF table plugin (autoTable) not available.', true);
+      return;
+    }
+
+    const filename = periodStart && periodEnd
+      ? `payroll_${periodStart}_to_${periodEnd}.pdf`
+      : 'payroll_current.pdf';
+
+    doc.save(filename);
+  } catch (err) {
+    console.error('exportPayrollAsPdf error', err);
+    setStatus('Failed to prepare payroll PDF view.', true);
+  }
 }
 
 // Wiring (defensive: only attach listeners if the elements exist on the page)
@@ -2086,12 +2290,248 @@ if (typeof saveRunBtn !== 'undefined' && saveRunBtn && saveRunBtn.addEventListen
   saveRunBtn.addEventListener('click', savePayrollRun);
 }
 
-if (typeof exportCsvBtn !== 'undefined' && exportCsvBtn && exportCsvBtn.addEventListener) {
-  exportCsvBtn.addEventListener('click', exportCsv);
+if (typeof exportPdfBtn !== 'undefined' && exportPdfBtn && exportPdfBtn.addEventListener) {
+  exportPdfBtn.addEventListener('click', exportPayrollAsPdf);
 }
 
+// Wire payroll search + pagination controls
+if (payrollSearchInput) {
+  payrollSearchInput.addEventListener('input', () => {
+    // reset visible count when searching so results start from top
+    payrollVisibleCount = PAYROLL_PAGE_STEP;
+    renderTable();
+  });
+}
+if (payrollViewMoreBtn) {
+  payrollViewMoreBtn.addEventListener('click', () => {
+    const all = getFilteredPayrollRows();
+    payrollVisibleCount = all.length || PAYROLL_PAGE_STEP;
+    renderTable();
+  });
+}
+if (payrollViewLessBtn) {
+  payrollViewLessBtn.addEventListener('click', () => {
+    payrollVisibleCount = PAYROLL_PAGE_STEP;
+    renderTable();
+  });
+}
+
+// -----------------------------
+// Attendance dashboard helpers (read-only list + search/pagination)
+// -----------------------------
+async function loadAttendanceDashboard(range = 'today') {
+  if (!attendanceBody) return;
+  try {
+    attendanceBody.innerHTML = '';
+    if (attendanceRowsCountEl) attendanceRowsCountEl.textContent = '0';
+
+    const attRef = collection(db, 'attendance');
+
+    // determine date range
+    let startIso = null;
+    const now = new Date();
+    if (range === 'today') {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      startIso = start.toISOString();
+    } else if (range === 'last7days') {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6); // last 7 days including today
+      startIso = start.toISOString();
+    }
+
+    let attQ;
+    if (startIso) {
+      attQ = query(attRef,
+        where('rawTime', '>=', startIso),
+        orderBy('rawTime', 'desc'),
+        limit(200)
+      );
+    } else {
+      attQ = query(attRef, orderBy('rawTime', 'desc'), limit(200));
+    }
+    const snap = await getDocs(attQ);
+
+    // Group attendance by user + calendar day so time-in and time-out
+    // appear on the same row in the dashboard.
+    const groups = new Map();
+
+    snap.docs.forEach(d => {
+      const data = d.data() || {};
+      const userId = data.userId || null;
+      const username = data.username || data.email || '';
+
+      // Prefer role stored on the attendance record; otherwise, fall back to the user profile role
+      let role = data.role || '';
+      if (!role && Array.isArray(usersList) && userId) {
+        const u = usersList.find(u => (u.userId || u.id) === userId);
+        if (u && u.role) role = u.role;
+      }
+      if (!role) role = 'employee';
+      const mode = data.mode || '';
+      const ts = data.recordedTime || data.rawTime || null;
+      if (!ts) return;
+      const dayKey = ts.slice(0, 10); // YYYY-MM-DD
+
+      const key = `${userId || 'unknown'}|${dayKey}`;
+      let g = groups.get(key);
+      if (!g) {
+        g = {
+          id: key,
+          userId,
+          username,
+          role,
+          dayKey,
+          timeIn: null,
+          timeOut: null,
+          timeInDocId: null,
+          timeOutDocId: null
+        };
+        groups.set(key, g);
+      }
+
+      // Assign earliest scan as time-in, latest as time-out when modes are missing
+      if (mode === 'time-in') {
+        if (!g.timeIn || ts < g.timeIn) {
+          g.timeIn = ts;
+          g.timeInDocId = d.id;
+        }
+      } else if (mode === 'time-out') {
+        if (!g.timeOut || ts > g.timeOut) {
+          g.timeOut = ts;
+          g.timeOutDocId = d.id;
+        }
+      } else {
+        // Fallback: if mode is missing, treat first as time-in, second as time-out
+        if (!g.timeIn) {
+          g.timeIn = ts;
+          g.timeInDocId = d.id;
+        } else if (!g.timeOut) {
+          g.timeOut = ts;
+          g.timeOutDocId = d.id;
+        }
+      }
+    });
+
+    attendanceRows = Array.from(groups.values()).sort((a, b) => {
+      const at = a.timeOut || a.timeIn || '';
+      const bt = b.timeOut || b.timeIn || '';
+      return bt.localeCompare(at);
+    });
+
+    attendanceVisibleCount = ATTENDANCE_PAGE_STEP;
+    renderAttendanceTable();
+  } catch (err) {
+    console.error('loadAttendanceDashboard error', err);
+  }
+}
+
+function getFilteredAttendanceRows() {
+  if (!Array.isArray(attendanceRows)) return [];
+  const term = (attendanceSearchInput && attendanceSearchInput.value || '').trim().toLowerCase();
+  if (!term) return attendanceRows.slice();
+  return attendanceRows.filter(r => {
+    const u = (r.username || '').toString().toLowerCase();
+    return u.includes(term);
+  });
+}
+
+function renderAttendanceTable() {
+  if (!attendanceBody) return;
+  attendanceBody.innerHTML = '';
+
+  filteredAttendanceRows = getFilteredAttendanceRows();
+  const slice = filteredAttendanceRows.slice(0, attendanceVisibleCount);
+
+  slice.forEach((r, idx) => {
+    const tr = document.createElement('tr');
+
+    const timeIn = r.timeIn;
+    const timeOut = r.timeOut;
+
+    const formatDateTime = (iso) => {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '';
+      return d.toLocaleString(undefined, {
+        year: 'numeric', month: 'short', day: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+      });
+    };
+
+    tr.innerHTML = `
+      <td>${idx + 1}</td>
+      <td>${(r.username || '').toString()}</td>
+      <td>${(r.role || '').toString()}</td>
+      <td>${formatDateTime(timeIn)}</td>
+      <td>${formatDateTime(timeOut)}</td>
+      <td></td>
+      <td>
+        <button type="button" class="action-btn small attendance-edit" data-id="${r.id}">Edit</button>
+        <button type="button" class="action-btn small attendance-delete" data-id="${r.id}">Delete</button>
+      </td>
+    `;
+
+    attendanceBody.appendChild(tr);
+  });
+
+  // wire action buttons
+  attendanceBody.querySelectorAll('.attendance-delete').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      if (!id) return;
+      openAttendanceModalDelete(id);
+    });
+  });
+
+  attendanceBody.querySelectorAll('.attendance-edit').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      if (!id) return;
+      const row = attendanceRows.find(r => r.id === id);
+      if (!row) return;
+      openAttendanceModalEdit(row);
+    });
+  });
+
+  if (attendanceRowsCountEl) {
+    attendanceRowsCountEl.textContent = String(filteredAttendanceRows.length || attendanceRows.length || 0);
+  }
+}
+
+if (attendanceSearchInput) {
+  attendanceSearchInput.addEventListener('input', () => {
+    attendanceVisibleCount = ATTENDANCE_PAGE_STEP;
+    renderAttendanceTable();
+  });
+}
+if (attendanceViewMoreBtn) {
+  attendanceViewMoreBtn.addEventListener('click', () => {
+    const all = getFilteredAttendanceRows();
+    attendanceVisibleCount = all.length || ATTENDANCE_PAGE_STEP;
+    renderAttendanceTable();
+  });
+}
+if (attendanceViewLessBtn) {
+  attendanceViewLessBtn.addEventListener('click', () => {
+    attendanceVisibleCount = ATTENDANCE_PAGE_STEP;
+    renderAttendanceTable();
+  });
+}
+
+if (attendanceRangeSelect) {
+  attendanceRangeSelect.addEventListener('change', () => {
+    const val = attendanceRangeSelect.value || 'today';
+    loadAttendanceDashboard(val).catch(e => console.warn('attendance range change failed', e));
+  });
+}
+
+// Kick off attendance dashboard after auth/init when on payroll page
+// (initLivePayroll and autoInitPayroll already handle main payroll logic.)
+document.addEventListener('DOMContentLoaded', () => {
+  try { loadAttendanceDashboard('today'); } catch (e) { console.warn('attendance dashboard init failed', e); }
+});
+
 // Export hooks for testing/debugging
-export { loadUsersAndAttendance, loadAttendanceForRows, calculateAll, savePayrollRun, exportCsv };
+export { loadUsersAndAttendance, loadAttendanceForRows, calculateAll, savePayrollRun, exportPayrollAsPdf };
 
 // -----------------------------
 // XLSX import -> modal preview -> confirm & save (drop-in admin UX)

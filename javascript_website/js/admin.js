@@ -33,7 +33,7 @@ if (typeof deleteDoc === 'undefined') {
 }
 
 // API base URL - set `window.API_BASE` on the page if you run the admin API on a different host/port.
-const API_BASE = (window.API_BASE && window.API_BASE.replace(/\/$/, '')) || 'https://mariners-hotellink.com';
+const API_BASE = (window.API_BASE && window.API_BASE.replace(/\/$/, '')) || 'http://localhost:3000';
 
 export function watchRequestsRealtime() {
   const container = document.getElementById('requests');
@@ -225,6 +225,14 @@ export function watchPayrollViewRequests() {
 
   panel.innerHTML = `<h3>Payroll View Requests</h3><div id="payrollRequestsList">Loading...</div>`;
 
+  const noticeEl = document.getElementById('adminPayrollNotice');
+  const showPayrollAdminNotice = (message, tone = 'info') => {
+    if (!noticeEl) return;
+    noticeEl.textContent = message;
+    noticeEl.className = `payroll-status payroll-status-${tone}`;
+    noticeEl.style.display = message ? 'block' : 'none';
+  };
+
   // only show pending requests to admins (approved/denied are not listed)
   // Query only by status (no orderBy) to avoid requiring a composite index while it builds.
   const q = query(
@@ -256,8 +264,8 @@ export function watchPayrollViewRequests() {
             <div style="font-size:12px;color:#666">${escapeHtml(r.department || '')} • ${escapeHtml(status)}</div>
           </div>
           <div style="display:flex;gap:6px;margin-left:8px">
-            <button class="approve-request-btn action-btn small" data-id="${d.id}" data-uid="${escapeHtml(r.userId)}" ${status==='approved' ? 'disabled' : ''}>Approve</button>
-            <button class="deny-request-btn action-btn small" data-id="${d.id}" ${status==='denied' ? 'disabled' : ''}>Deny</button>
+            <button class="approve-request-btn action-btn small" data-id="${d.id}" data-uid="${escapeHtml(r.userId)}" data-username="${escapeHtml(r.username || r.userId)}" ${status==='approved' ? 'disabled' : ''}>Approve</button>
+            <button class="deny-request-btn action-btn small" data-id="${d.id}" data-username="${escapeHtml(r.username || r.userId)}" ${status==='denied' ? 'disabled' : ''}>Deny</button>
           </div>
         </div>
       `;
@@ -267,16 +275,16 @@ export function watchPayrollViewRequests() {
       btn.addEventListener('click', async (e) => {
         const requestId = btn.dataset.id;
         const uid = btn.dataset.uid;
-        if (!confirm('Approve this payroll view request?')) return;
+        const username = btn.dataset.username || uid || 'this account';
         try {
           const reqRef = doc(db, 'payrollViewRequests', requestId);
           await updateDoc(reqRef, { status: 'approved', approvedBy: auth.currentUser.uid, approvedAt: serverTimestamp() });
           const userRef = doc(db, 'users', uid);
           await updateDoc(userRef, { payrollViewAllowed: true, payrollViewAllowedAt: serverTimestamp() });
-          alert('Request approved.');
+          showPayrollAdminNotice(`Payroll view request approved for ${username}. They can now view their most recent payroll.`, 'success');
         } catch (err) {
           console.error('Approve failed', err);
-          alert('Failed to approve: ' + (err.message || err));
+          showPayrollAdminNotice('Failed to approve payroll request: ' + (err.message || err), 'error');
         }
       });
     });
@@ -284,14 +292,14 @@ export function watchPayrollViewRequests() {
     container.querySelectorAll('.deny-request-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         const requestId = btn.dataset.id;
-        if (!confirm('Deny this payroll view request?')) return;
+        const username = btn.dataset.username || 'this account';
         try {
           const reqRef = doc(db, 'payrollViewRequests', requestId);
           await updateDoc(reqRef, { status: 'denied', deniedBy: auth.currentUser.uid, deniedAt: serverTimestamp() });
-          alert('Request denied.');
+          showPayrollAdminNotice(`Payroll view request denied for ${username}.`, 'error');
         } catch (err) {
           console.error('Deny failed', err);
-          alert('Failed to deny: ' + (err.message || err));
+          showPayrollAdminNotice('Failed to deny payroll request: ' + (err.message || err), 'error');
         }
       });
     });

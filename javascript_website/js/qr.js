@@ -15,7 +15,7 @@ import {
 import { evaluateForUser } from './payroll-utils.js';
 
 // API base (matches pattern used in admin.js)
-const API_BASE = (window.API_BASE && window.API_BASE.replace(/\/$/, '')) || 'https://mariners-hotellink.com';
+const API_BASE = (window.API_BASE && window.API_BASE.replace(/\/$/, '')) || 'http://localhost:3000';
 
 // -------------------- GENERATOR UI refs --------------------
 const createForm = document.getElementById('createForm');
@@ -808,6 +808,7 @@ export function initializeScanner() {
     const record = {
       userId: userDoc.id,
       username: userDoc.username || userDoc.email || null,
+      email: userDoc.email || null,
       mode,
       recordedTime: evalRes.recordedTime.toISOString(),
       rawTime: now.toISOString(),

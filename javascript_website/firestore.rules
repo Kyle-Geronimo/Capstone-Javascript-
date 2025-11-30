@@ -1,16 +1,6 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /payrolls/{payrollId} {
-      allow read, list: if request.auth != null
-         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-      allow write: if false; // keep writes protected or restrict separately
-      match /lines/{lineId} {
-        allow read: if request.auth != null
-         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-        allow write: if false;
-      }
-    }
 
     // --------------------------------
     // Helper functions
@@ -41,14 +31,19 @@ service cloud.firestore {
     // Payroll View Requests
     // --------------------------------
     match /payrollViewRequests/{requestId} {
-      // Any signed-in user may create a payroll view request for themselves
+      // Any signed-in user (admin or employee) may create a payroll view request for themselves
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
 
       // Admins may read/update/delete all requests
-      allow read, update, delete: if isAdmin();
+      // Non-admin users may read their own requests so the UI can check for pending/approved status
+      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      // Only admins can update requests (approve/deny)
+      allow update: if isAdmin();
 
       // Request owners may delete their own pending request (withdraw)
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // Admins can also delete any request if needed
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
     // --------------------------------
@@ -86,12 +81,18 @@ service cloud.firestore {
     // Payroll Runs
     // --------------------------------
     match /payrolls/{payrollId} {
-      allow create: if isAdmin();
-      allow read: if isAdmin() || (resource.data.createdBy == request.auth.uid);
-      allow update, delete: if isAdmin();
+      // Only admins can create/update/delete payroll runs
+      allow create, update, delete: if isAdmin();
+
+      // Any signed-in user (admin or employee) may read payroll runs.
+      // This is required for fetchMostRecentPayrollRun() which queries the
+      // payrolls collection when an employee's request is approved.
+      allow read: if isSignedIn();
 
       match /lines/{lineId} {
-        allow read: if isAdmin() || (isSignedIn() && request.auth.uid == lineId);
+        // Any signed-in user may read payroll lines (used to display their
+        // own saved payroll data on the profile page). Writes remain admin-only.
+        allow read: if isSignedIn();
         allow create, update, delete: if isAdmin();
       }
     }
@@ -138,11 +139,6 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow write: if false; // only backend server/batch writes
     }
-    // Add to your Firestore rules
-		match /payrolls/{runId} {
-  		allow read, write: if request.auth != null && 
-      get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == "admin";
-		}
 
     // --------------------------------
     // Guest Reservations (Chatbot dashboard)

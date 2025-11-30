@@ -15,12 +15,14 @@
   <header>
     <div class="container">
       <h1>HotelLink</h1>
-      <nav>
-        <a href="../index2.html" class="nav-btn">Home</a>
+      <nav style="visibility:hidden;">
+        <a href="../index2.html" class="nav-btn restricted">Home</a>
         <a href="chatbot.html" class="nav-btn restricted">Chatbot Data</a>
-        <a href="admin.html" class="nav-btn restricted admin-only">Admin</a>
-        <a href="payroll.html" class="nav-btn restricted admin-only">Payroll</a>
+        <a href="dashboard.html" class="nav-btn restricted">Dashboard</a>
+        <a href="admin.html" class="nav-btn restricted admin-only" style="display:none;">Admin</a>
+        <a href="payroll.html" class="nav-btn restricted admin-only" style="display:none;">Payroll</a>
         <a href="profile.html" class="nav-btn restricted">Profile</a>
+        <a href="#" id="logout-btn" class="nav-btn restricted">Logout</a>
       </nav>
     </div>
   </header>
@@ -50,6 +52,9 @@
         <!-- ===== REPLACE existing payroll area with this payroll display (profile.html) ===== -->
         <section id="payroll-info" class="profile-section">
           <h2>Payroll</h2>
+
+          <!-- Inline status / messages for payroll view & requests -->
+          <div id="payrollStatus" class="payroll-status" style="display:none;"></div>
 
           <!-- Banner for the shown payroll run (created by JS when approved) -->
 
@@ -128,7 +133,7 @@
 
   <footer>
     <div class="container">
-      <p>&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>
+      <p style="text-align: center;">&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>
     </div>
   </footer>
 
@@ -136,6 +141,14 @@
     import { auth, getUserRole } from '../js/firebase-config.js';
     import { loadProfile, loadUserQR, downloadUserQR, printUserQR } from '../js/profile.js';
     import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
+    import { logout } from '../js/auth.js';
+
+    // On profile page, never show Admin/Payroll buttons in the nav for any role.
+    // This guarantees employees won't see a flash when switching to this page.
+    const nav = document.querySelector('nav');
+    if (nav) {
+      nav.querySelectorAll('.nav-btn.admin-only').forEach(link => link.remove());
+    }
 
     const container = document.getElementById('profile-info');
     container.innerHTML = '<div class="profile-card"><em>Loading profile...</em></div>';
@@ -182,6 +195,18 @@
       updateNavVisibility();
       highlightActiveNavBtn();
     });
+
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          await logout();
+        } catch (err) {
+          console.error('Logout failed from profile page:', err);
+        }
+      });
+    }
   </script>
 
   <!-- Static Edit Profile Modal (hidden by default) -->
@@ -267,6 +292,14 @@
 
         // Elements
         const requestBtn = document.getElementById('loadPayroll');
+        const payrollStatusEl = document.getElementById('payrollStatus');
+
+        const showPayrollStatus = (message, tone = 'info') => {
+          if (!payrollStatusEl) return;
+          payrollStatusEl.textContent = message;
+          payrollStatusEl.className = `payroll-status payroll-status-${tone}`;
+          payrollStatusEl.style.display = message ? 'block' : 'none';
+        };
         if (!requestBtn) {
           console.warn('Payroll request button #loadPayroll not found');
           return;
@@ -320,7 +353,7 @@
         requestBtn.addEventListener('click', async () => {
           try {
             const user = auth.currentUser;
-            if (!user) { alert('Please sign in to request payroll view.'); return; }
+            if (!user) { showPayrollStatus('Please sign in to request payroll view.', 'error'); return; }
 
             const uDocRef = doc(db, 'users', user.uid);
             const uSnap = await getDoc(uDocRef);
@@ -330,7 +363,7 @@
             const q = query(collection(db, 'payrollViewRequests'), where('userId', '==', user.uid), where('status', '==', 'pending'));
             const snap = await getDocs(q);
             if (!snap.empty) {
-              alert('You already have a pending payroll view request. An admin will review it shortly.');
+              showPayrollStatus('You already have a pending payroll view request. An admin will review it shortly.', 'info');
               return;
             }
 
@@ -343,10 +376,10 @@
             };
 
             await addDoc(collection(db, 'payrollViewRequests'), payload);
-            alert('Payroll view request submitted. An admin will review it.');
+            showPayrollStatus('Payroll view request submitted. An admin will review it.', 'success');
           } catch (err) {
             console.error('Failed to submit payroll request', err);
-            alert('Failed to submit payroll request: ' + (err.message || err));
+            showPayrollStatus('Failed to submit payroll request: ' + (err.message || err), 'error');
           }
         });
 
@@ -366,17 +399,18 @@
               if (req.status === 'approved') {
                 try {
                   if (!fetchMostRecentPayrollRun) {
-                    alert('Request approved but payroll loader is not available on this page.');
+                    showPayrollStatus('Request approved but payroll loader is not available on this page.', 'warning');
                     return;
                   }
                   const { ratesMap, runMeta, linesMap } = await fetchMostRecentPayrollRun();
                   await renderPayrollForUser(user.uid, linesMap, runMeta);
+                  showPayrollStatus('Your payroll request was approved. Showing your most recent saved payroll run.', 'success');
                 } catch (e) {
                   console.error('Error loading saved payroll run after approval', e);
-                  alert('Failed to load saved payroll run.');
+                  showPayrollStatus('Failed to load saved payroll run.', 'error');
                 }
               } else if (req.status === 'denied') {
-                alert('Your payroll view request was denied by an administrator.');
+                showPayrollStatus('Your payroll view request was denied by an administrator.', 'error');
               } else {
                 // pending - no UI change
               }
@@ -400,7 +434,7 @@
             : null;
 
           if (!line) {
-            alert('There is no saved payroll line for you in the most recent run.');
+            showPayrollStatus('There is no saved payroll line for you in the most recent run.', 'warning');
             return;
           }
 

@@ -21,19 +21,21 @@
   <header>
     <div class="container">
       <h1>HotelLink</h1>
-      <nav>
-        <a href="../index2.html" class="nav-btn">Home</a>
+      <nav style="visibility:hidden;">
+        <a href="../index2.html" class="nav-btn restricted">Home</a>
         <a href="chatbot.html" class="nav-btn restricted">Chatbot Data</a>
-        <a href="admin.html" class="nav-btn restricted admin-only">Admin</a>
-        <a href="payroll.html" class="nav-btn restricted admin-only">Payroll</a>
+        <a href="dashboard.html" class="nav-btn restricted">Dashboard</a>
+        <a href="admin.html" class="nav-btn restricted admin-only" style="display:none;">Admin</a>
+        <a href="payroll.html" class="nav-btn restricted admin-only" style="display:none;">Payroll</a>
         <a href="profile.html" class="nav-btn restricted">Profile</a>
+        <a href="#" id="logout-btn" class="nav-btn restricted">Logout</a>
       </nav>
     </div>
   </header>
 
   <main>
     <section class="form-container chatbot-data-container admin-dashboard">
-      <h2>Dashboard</h2>
+      <h2>Admin</h2>
 
       <!-- Account Requests Section -->
       <div class="admin-section">
@@ -48,6 +50,8 @@
       <!-- User Management Section -->
       <!-- Payroll View Requests panel (admins) -->
       <div id="payroll-requests-wrapper" style="display:flex;flex-direction:column;gap:8px; margin-top:12px;">
+        <!-- Inline banner to show actions taken on payroll requests -->
+        <div id="adminPayrollNotice" class="payroll-status" style="display:none;"></div>
         <div id="payroll-requests-panel" class="requests-panel profile-card" style="width:360px;min-width:280px;max-height:78vh;overflow:auto;padding:12px;border-radius:8px;">
           <h3 style="margin:0 0 8px 0;">Payroll View Requests</h3>
           <div id="payrollRequestsList">Loading payroll view requests...</div>
@@ -78,6 +82,7 @@
     import { auth, getUserRole } from '../js/firebase-config.js';
     import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
     import { watchRequestsRealtime, loadAccounts } from '../js/admin.js';
+    import { logout } from '../js/auth.js';
 
     updateNavVisibility();
     highlightActiveNavBtn();
@@ -104,6 +109,18 @@
       watchRequestsRealtime(); 
       loadAccounts(); 
     });
+    
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          await logout();
+        } catch (err) {
+          console.error('Logout failed from admin page:', err);
+        }
+      });
+    }
   </script>
 </body>
 </html>

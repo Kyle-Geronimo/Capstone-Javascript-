@@ -7,12 +7,31 @@
   <link rel="icon" type="image/png" href="/image/logo/HTLogo.png">
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/home-enhancements.css">
+  <!-- Luxury serif + cursive fonts for customer home -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Great+Vibes&display=swap" rel="stylesheet">
 </head>
+
 <body>
+  <!-- Opening intro overlay: shows before any content -->
+  <div id="intro-overlay" class="intro-overlay" aria-hidden="true">
+    <div class="intro-overlay-inner">
+      <span class="intro-line intro-line-small">Welcome</span>
+      <span class="intro-line intro-line-small">to</span>
+      <span class="intro-line intro-line-main">HotelLink</span>
+    </div>
+  </div>
+
   <header>
     <div class="container">
       <h1>LinkHotel</h1>
-      <nav>
+      <button id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="main-nav">
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+      </button>
+      <nav id="main-nav">
         <a href="#home" class="nav-btn">Home</a>
         <a href="#about" class="nav-btn public-only">About Us</a>
         <a href="#contacts" class="nav-btn public-only">Contacts</a>
@@ -26,19 +45,8 @@
     <section class="home-hero" id="home">
       <div class="container hero-inner">
         <div class="hero-copy">
-          <h2 style="margin-top: 3rem;">Experience the magic that awaits behind our doors</h2>
+          <h2 style="margin-top: 3rem; font-size: 60px;">Experience the magic that awaits behind our doors</h2>
           <p class="lead" style="margin-top: 2rem;">LinkHotel connects you with partner hotels in Kumintang Ibaba so you can enjoy seamless, comfortable stays — from check‑in to check‑out.</p>
-
-          <div class="hero-ctas">
-            <button id="login-cta" class="action-btn primary">Login</button>
-            <button id="signup-cta" class="action-btn secondary">Request staff access</button>
-          </div>
-
-          <ul class="trust-features">
-            <li><strong>Secure:</strong> Firebase-backed authentication</li>
-            <li><strong>Fast:</strong> QR-powered check-in & quick scheduling</li>
-            <li><strong>Reliable:</strong> Built for hotel staff workflows</li>
-          </ul>
         </div>
 
         <!-- kept for decorative illustration / hero-only content; removed weather from here -->
@@ -50,77 +58,41 @@
       </div>
     </section>
 
-    <!-- ABOUT US / FEATURES GRID -->
+    <!-- ABOUT US / FEATURES (typed cursive tagline) -->
     <section class="home-features" id="about">
       <div class="container">
         <h3 class="section-title">About LinkHotel</h3>
-        <div class="features-grid">
-          <div class="feature-card card">
 
-            <svg class="feature-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="8" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.4"/></svg>
-            <div>
-              <h4>Effortless check‑in</h4>
-              <p class="muted">Arrive and settle in faster with streamlined, front‑desk friendly workflows.</p>
-
-            </div>
-          </div>
-
-          <div class="feature-card card">
-            <svg class="feature-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10M7 11h10M7 15h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <div>
-              <h4>Smart assistance</h4>
-              <p class="muted">Ask about room types, rates, and hotel details through our built‑in assistant.</p>
-
-            </div>
-          </div>
-
-          <div class="feature-card card">
-            <svg class="feature-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v7l5 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.4"/></svg>
-            <div>
-              <h4>Seamless coordination</h4>
-              <p class="muted">Behind the scenes, staff tools keep your stay running smoothly.</p>
-
-            </div>
-          </div>
-
-          <div class="feature-card card">
-            <svg class="feature-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
-            <div>
-              <h4>Minimalist luxury</h4>
-              <p class="muted">Clean, calming design in shades of blue inspired by Batangas waterfront views.</p>
-            </div>
-          </div>
+        <!-- Cursive typed animation line -->
+        <div class="about-typed-wrap">
+          <p class="about-typed-lead">LinkHotel is all about</p>
+          <p class="about-typed-line">
+            <span id="about-typed-text"></span>
+            <span class="typed-cursor">|</span>
+          </p>
         </div>
 
-        <!-- D' Mariners Hotel image album -->
-        <div class="card" style="margin-top: 2.5rem; padding: 1.5rem; display:flex; flex-direction:column; gap:1.25rem;">
-          <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:1rem; flex-wrap:wrap;">
-            <div>
-              <h4 style="margin:0;">D’ Mariners Hotel – Gallery</h4>
-              <p class="muted" style="margin-top:0.25rem; max-width:460px;">
-                A cozy, well‑kept hotel in Batangas City focused on comfort and warm service.
-              </p>
+        <!-- D' Mariners Hotel – Gallery -->
+        <div class="card hotel-gallery-card" style="margin-top: 2.5rem; padding: 1.5rem; display:flex; flex-direction:column; gap:1.25rem;">
+          <div class="hotel-gallery-hero dmariners-hero">
+            <div class="hotel-gallery-hero-inner">
+              <h4>D’ Mariners Hotel – Gallery</h4>
+              <p class="muted">A cozy, well‑kept hotel in Batangas City focused on comfort and warm service.</p>
             </div>
           </div>
 
-          <div class="dmariners-album" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px;">
+          <div class="hotel-gallery-thumbs dmariners-album" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px;">
             <a href="/hotelimages/d1.jpg" class="dmariners-thumb gallery-thumb">
-              <img src="/hotelimages/d1.jpg" alt="D’ Mariners Hotel photo 1" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
+              <img src="/hotelimages/d1.jpg" alt="D’ Mariners Hotel room 1" />
             </a>
             <a href="/hotelimages/d2.jpg" class="dmariners-thumb gallery-thumb">
-              <img src="/hotelimages/d2.jpg" alt="D’ Mariners Hotel photo 2" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
+              <img src="/hotelimages/d2.jpg" alt="D’ Mariners Hotel room 2" />
             </a>
             <a href="/hotelimages/d3.jpg" class="dmariners-thumb gallery-thumb">
-              <img src="/hotelimages/d3.jpg" alt="D’ Mariners Hotel photo 3" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
+              <img src="/hotelimages/d3.jpg" alt="D’ Mariners Hotel room 3" />
             </a>
             <a href="/hotelimages/d4.jpg" class="dmariners-thumb gallery-thumb">
-              <img src="/hotelimages/d4.jpg" alt="D’ Mariners Hotel photo 4" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
-            </a>
-            <a href="/hotelimages/d5.jpg" class="dmariners-thumb gallery-thumb">
-              <img src="/hotelimages/d5.jpg" alt="D’ Mariners Hotel photo 5" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
-            </a>
-            <a href="/hotelimages/d6.jpg" class="dmariners-thumb gallery-thumb">
-              <img src="/hotelimages/d6.jpg" alt="D’ Mariners Hotel photo 6" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
+              <img src="/hotelimages/d4.jpg" alt="D’ Mariners Hotel room 4" />
             </a>
           </div>
 
@@ -140,92 +112,82 @@
           </div>
         </div>
 
-        <!-- Wennrod Hotel image album -->
-        <div class="card" style="margin-top: 1.75rem; padding: 1.5rem; display:flex; flex-direction:column; gap:1.25rem;">
-          <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:1rem; flex-wrap:wrap;">
-            <div>
-              <h4 style="margin:0;">Wennrod Hotel – Gallery</h4>
-              <p class="muted" style="margin-top:0.25rem; max-width:460px;">
-                Discover relaxing rooms and practical comforts in Batangas City.
-              </p>
+        <!-- Wennrod Hotel – Gallery -->
+        <div class="card hotel-gallery-card" style="margin-top: 1.75rem; padding: 1.5rem; display:flex; flex-direction:column; gap:1.25rem;">
+          <div class="hotel-gallery-hero wennrod-hero">
+            <div class="hotel-gallery-hero-inner">
+              <h4>Wennrod Hotel – Gallery</h4>
+              <p class="muted">Discover relaxing rooms and practical comforts in Batangas City.</p>
             </div>
           </div>
 
-          <div class="wennrod-album" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px;">
+          <div class="hotel-gallery-thumbs wennrod-album" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px;">
             <a href="/hotelimages/wen1.jpg" class="wennrod-thumb gallery-thumb">
-              <img src="/hotelimages/wen1.jpg" alt="Wennrod Hotel room 1" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
+              <img src="/hotelimages/wen1.jpg" alt="Wennrod Hotel room 1" />
             </a>
             <a href="/hotelimages/wen2.jpg" class="wennrod-thumb gallery-thumb">
-              <img src="/hotelimages/wen2.jpg" alt="Wennrod Hotel room 2" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
+              <img src="/hotelimages/wen2.jpg" alt="Wennrod Hotel room 2" />
             </a>
             <a href="/hotelimages/wen3.jpg" class="wennrod-thumb gallery-thumb">
-              <img src="/hotelimages/wen3.jpg" alt="Wennrod Hotel room 3" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
+              <img src="/hotelimages/wen3.jpg" alt="Wennrod Hotel room 3" />
             </a>
             <a href="/hotelimages/wen4.jpg" class="wennrod-thumb gallery-thumb">
-              <img src="/hotelimages/wen4.jpg" alt="Wennrod Hotel room 4" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
-            </a>
-            <a href="/hotelimages/wen5.jpg" class="wennrod-thumb gallery-thumb">
-              <img src="/hotelimages/wen5.jpg" alt="Wennrod Hotel room 5" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
-            </a>
-            <a href="/hotelimages/wen6.jpg" class="wennrod-thumb gallery-thumb">
-              <img src="/hotelimages/wen6.jpg" alt="Wennrod Hotel room 6" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
+              <img src="/hotelimages/wen4.jpg" alt="Wennrod Hotel room 4" />
             </a>
           </div>
 
-          <div style="margin-top:0.25rem;">
-            <strong>About this property</strong>
-            <p class="muted" style="margin-top:0.35rem; max-width:720px;">
-              <span id="wennrod-summary">Comfortable 2-star rooms in Batangas with air‑conditioning, private bathrooms, and relaxing views.</span>
-              <span id="wennrod-more" style="display:none;">
-                &nbsp;WENNROD Hotel offers 2‑star accommodations with air‑conditioning, private bathrooms with bidets, free toiletries, showers, slippers, and TVs. Many rooms feature terraces, balconies, mountain views, and landmark views. Guests enjoy a 24‑hour front desk, housekeeping, room service, and free on‑site private parking. Additional conveniences include a work desk, microwave, dining area, and electric kettle. An à la carte breakfast is available for guests. Located about 62 km from Ninoy Aquino International Airport, the hotel provides easy access to local attractions.
-                <span class="muted" style="display:block;margin-top:0.15rem;font-size:0.82rem;">Distance in this description is calculated using &copy; OpenStreetMap.</span>
-              </span>
-              <button id="wennrod-toggle" type="button" class="link-btn" style="margin-left:0.25rem;">See more...</button>
+          <div style="margin-top:0.75rem;">
+            <h4 style="margin:0 0 0.35rem 0;">WHY CHOOSE WENNROD HOTEL</h4>
+            <ul class="muted" style="list-style: disc; padding-left: 1.5rem; margin:0 0 0.5rem 0;">
+              <li>Comfortable 2-star rooms with air‑conditioning</li>
+              <li>Private bathrooms with relaxing amenities</li>
+              <li>Rooms with terraces, balconies, and scenic views</li>
+              <li>24-hour front desk, housekeeping, and room service</li>
+              <li>Convenient access to key attractions in Batangas City</li>
+            </ul>
+            <p class="muted" style="margin:0; max-width:720px;">
+              WENNROD Hotel offers practical comfort for guests who want relaxing stays in Batangas City, with friendly service and
+              thoughtful room amenities for both short and longer visits.
             </p>
           </div>
         </div>
 
-        <!-- Bicotels Hotel image album -->
-        <div class="card" style="margin-top: 1.75rem; padding: 1.5rem; display:flex; flex-direction:column; gap:1.25rem;">
-          <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:1rem; flex-wrap:wrap;">
-            <div>
-              <h4 style="margin:0;">Bicotels Hotel – Gallery</h4>
-              <p class="muted" style="margin-top:0.25rem; max-width:460px;">
-                Simple, comfortable stays close to key spots in Batangas City.
-              </p>
+        <!-- Bicotels Hotel – Gallery -->
+        <div class="card hotel-gallery-card" style="margin-top: 1.75rem; padding: 1.5rem; display:flex; flex-direction:column; gap:1.25rem;">
+          <div class="hotel-gallery-hero bicotels-hero">
+            <div class="hotel-gallery-hero-inner">
+              <h4>Bicotels Hotel – Gallery</h4>
+              <p class="muted">Simple, comfortable stays close to key spots in Batangas City.</p>
             </div>
           </div>
 
-          <div class="bicotels-album" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px;">
+          <div class="hotel-gallery-thumbs bicotels-album" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px;">
             <a href="/hotelimages/bic1.jpg" class="bicotels-thumb gallery-thumb">
-              <img src="/hotelimages/bic1.jpg" alt="Bicotels Hotel room 1" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
+              <img src="/hotelimages/bic1.jpg" alt="Bicotels Hotel room 1" />
             </a>
             <a href="/hotelimages/bic2.jpg" class="bicotels-thumb gallery-thumb">
-              <img src="/hotelimages/bic2.jpg" alt="Bicotels Hotel room 2" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
+              <img src="/hotelimages/bic2.jpg" alt="Bicotels Hotel room 2" />
             </a>
             <a href="/hotelimages/bic3.jpg" class="bicotels-thumb gallery-thumb">
-              <img src="/hotelimages/bic3.jpg" alt="Bicotels Hotel room 3" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
+              <img src="/hotelimages/bic3.jpg" alt="Bicotels Hotel room 3" />
             </a>
             <a href="/hotelimages/bic4.jpg" class="bicotels-thumb gallery-thumb">
-              <img src="/hotelimages/bic4.jpg" alt="Bicotels Hotel room 4" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
-            </a>
-            <a href="/hotelimages/bic5.jpg" class="bicotels-thumb gallery-thumb">
-              <img src="/hotelimages/bic5.jpg" alt="Bicotels Hotel room 5" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
-            </a>
-            <a href="/hotelimages/bic6.jpg" class="bicotels-thumb gallery-thumb">
-              <img src="/hotelimages/bic6.jpg" alt="Bicotels Hotel room 6" style="width:100%;height:110px;object-fit:cover;border-radius:10px;display:block;" />
+              <img src="/hotelimages/bic4.jpg" alt="Bicotels Hotel room 4" />
             </a>
           </div>
 
-          <div style="margin-top:0.25rem;">
-            <strong>About this property</strong>
-            <p class="muted" style="margin-top:0.35rem; max-width:720px;">
-              <span id="bicotels-summary">Comfortable rooms in Batangas City with air‑conditioning, private bathrooms, and practical in‑room amenities.</span>
-              <span id="bicotels-more" style="display:none;">
-                &nbsp;Bicotels Hotel in Batangas City offers comfortable rooms with air‑conditioning, private bathrooms with bidets, dining tables, work desks, free toiletries, showers, TVs, and tiled floors. Guests enjoy free Wi‑Fi, a 24‑hour front desk, housekeeping service, and room service. Free on‑site private parking is available for added convenience. An Asian breakfast is served daily. Villa Escudero Museum is about 48 km away, and Ninoy Aquino International Airport is roughly 94 km from the hotel.
-                <span class="muted" style="display:block;margin-top:0.15rem;font-size:0.82rem;">Distance in this description is calculated using &copy; OpenStreetMap.</span>
-              </span>
-              <button id="bicotels-toggle" type="button" class="link-btn" style="margin-left:0.25rem;">See more...</button>
+          <div style="margin-top:0.75rem;">
+            <h4 style="margin:0 0 0.35rem 0;">WHY CHOOSE BICOTELS HOTEL</h4>
+            <ul class="muted" style="list-style: disc; padding-left: 1.5rem; margin:0 0 0.5rem 0;">
+              <li>Comfortable rooms with air‑conditioning</li>
+              <li>Private bathrooms with practical amenities</li>
+              <li>24-hour front desk and reliable housekeeping</li>
+              <li>Free on‑site private parking for guests</li>
+              <li>Convenient location near key spots in Batangas City</li>
+            </ul>
+            <p class="muted" style="margin:0; max-width:720px;">
+              Bicotels Hotel offers simple but comfortable stays, ideal for guests who need a practical home base close to
+              businesses, dining, and transport hubs around Batangas City.
             </p>
           </div>
         </div>
@@ -280,26 +242,12 @@
       </div>
     </section>
 
-    <!-- LOGIN SHORTCUTS (STAFF / ADMIN ENTRY) -->
-    <section class="home-quicklinks" id="login">
-      <div class="container">
-        <h3 class="section-title">Staff Login</h3>
-        <div class="quicklinks-row">
-
-          <a class="quicklink card" href="pages/login.html">
-            <strong>Sign In</strong>
-            <span class="muted">Access staff portal</span>
-          </a>
-          <a class="quicklink card" href="pages/signup.html">
-            <strong>Create account</strong>
-            <span class="muted">Request access</span>
-          </a>
-        </div>
-      </div>
-    </section>
-
     <!-- Floating Chat Widget (now powered by in-app chatbot) -->
     <div class="chat-widget" aria-live="polite">
+      <div class="chat-widget-teaser" id="chat-widget-teaser">
+        <span class="chat-widget-teaser-text">👋 Hi, I’m the HotelLink AI assistant.</span>
+        <button type="button" class="chat-widget-teaser-close" id="chat-widget-teaser-close" aria-label="Hide assistant message">&times;</button>
+      </div>
       <div class="chat-widget-panel" id="chat-widget-panel">
         <div class="chat-widget-header">
           <div class="chat-widget-title">
@@ -315,7 +263,7 @@
           <div class="chat-widget-messages" id="chat-messages">
             <div class="chat-message chat-message-bot">
               <div class="chat-bubble">
-                Hi, I’m the HotelLink assistant. You can ask me about room types, availability, pricing, or hotel policies.
+                👋 Hi, I’m the HotelLink AI assistant. You can ask me about room types, availability, pricing, or hotel policies.
               </div>
             </div>
           </div>
@@ -364,6 +312,31 @@
     import { logout } from './js/auth.js';
     import { logVisit } from './js/analytics.js';
 
+    // --- Intro overlay: hide content until welcome animation finishes ---
+    const initIntroOverlay = () => {
+      const body = document.body;
+      const overlay = document.getElementById('intro-overlay');
+      if (!overlay || !body) return;
+
+      // hide underlying content while intro is active
+      body.classList.add('intro-active');
+
+      // fade out overlay near the end of the text animation
+      const fadeDelay = 2600; // ms
+      const removeDelay = 3400; // ms
+
+      setTimeout(() => {
+        overlay.classList.add('is-fading');
+      }, fadeDelay);
+
+      setTimeout(() => {
+        body.classList.remove('intro-active');
+        if (overlay && overlay.parentNode) {
+          overlay.parentNode.removeChild(overlay);
+        }
+      }, removeDelay);
+    };
+
     // --- NEW: Scroll Animation Initializer ---
     const initScrollAnimations = () => {
       // Elements we want to animate on scroll
@@ -388,7 +361,7 @@
         });
       }, {
         // Options for the observer: start animating when 10% of element is visible
-        threshold: 0.1 
+        threshold: 0.1
       });
 
       observerElements.forEach(el => observer.observe(el));
@@ -401,18 +374,18 @@
       const publicNavElements = document.querySelectorAll('.nav-btn.public-only');
       const heroCtas = document.querySelector('.hero-ctas');
       const quicklinks = document.querySelector('.quicklinks-row');
-      
+
       if (user) {
         publicNavElements.forEach(el => el.style.display = 'none');
         if (heroCtas) heroCtas.style.display = 'none';
-        
+
         const publicQuicklinks = quicklinks.querySelectorAll('a:not(.restricted)');
         publicQuicklinks.forEach(el => el.style.display = 'none');
-        
+
       } else {
         publicNavElements.forEach(el => el.style.display = '');
         if (heroCtas) heroCtas.style.display = 'flex';
-        
+
         const publicQuicklinks = quicklinks.querySelectorAll('a:not(.restricted)');
         publicQuicklinks.forEach(el => el.style.display = 'flex');
       }
@@ -420,7 +393,9 @@
     // --- END PREVIOUS LOGIC ---
 
     // Initial load checks
+    initIntroOverlay();
     updateNavVisibility();
+
     highlightActiveNavBtn();
 
     // Ensure public-only nav (Home/About/Contacts/Login) is hidden for signed-in users immediately
@@ -440,11 +415,51 @@
       
     });
 
-    document.getElementById('login-cta').addEventListener('click', () => {
-      window.location.href = 'pages/login.html';
-    });
+    // Mobile nav hamburger toggle
+    const navToggle = document.getElementById('nav-toggle');
+    const mainNav = document.getElementById('main-nav');
 
-    document.getElementById('signup-cta').addEventListener('click', () => window.location.href = 'pages/signup.html');
+    const closeMobileNav = () => {
+      document.body.classList.remove('nav-open');
+      if (navToggle) navToggle.setAttribute('aria-expanded', 'false');
+    };
+
+    if (navToggle && mainNav) {
+      navToggle.addEventListener('click', () => {
+        const isOpen = document.body.classList.toggle('nav-open');
+        navToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      });
+
+      // Close menu when a nav link is clicked (on mobile)
+      mainNav.querySelectorAll('.nav-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (window.innerWidth <= 720) {
+            closeMobileNav();
+          }
+        });
+      });
+
+      // Reset state when resizing back to desktop
+      window.addEventListener('resize', () => {
+        if (window.innerWidth > 720) {
+          closeMobileNav();
+        }
+      });
+    }
+
+    const loginCta = document.getElementById('login-cta');
+    if (loginCta) {
+      loginCta.addEventListener('click', () => {
+        window.location.href = 'pages/login.html';
+      });
+    }
+
+    const signupCta = document.getElementById('signup-cta');
+    if (signupCta) {
+      signupCta.addEventListener('click', () => {
+        window.location.href = 'pages/signup.html';
+      });
+    }
 
     // Wennrod Hotel "See more" toggle
     const wennrodToggle = document.getElementById('wennrod-toggle');
@@ -480,6 +495,8 @@
     const chatWidgetToggle = document.getElementById('chat-widget-toggle');
     const chatWidgetPanel = document.getElementById('chat-widget-panel');
     const chatWidgetClose = document.getElementById('chat-widget-close');
+    const chatWidgetTeaser = document.getElementById('chat-widget-teaser');
+    const chatWidgetTeaserClose = document.getElementById('chat-widget-teaser-close');
     const chatMessages = document.getElementById('chat-messages');
     const chatForm = document.getElementById('chat-form');
     const chatInput = document.getElementById('chat-input');
@@ -488,6 +505,7 @@
       if (!chatWidgetPanel) return;
       chatWidgetPanel.classList.add('is-open');
       if (chatInput) chatInput.focus();
+      if (chatWidgetTeaser) chatWidgetTeaser.classList.add('is-hidden');
     };
 
     const closeChatPanel = () => {
@@ -502,6 +520,23 @@
         } else {
           openChatPanel();
         }
+      });
+    }
+
+    // Teaser click: open chat
+    if (chatWidgetTeaser) {
+      chatWidgetTeaser.addEventListener('click', (e) => {
+        // Avoid double-handling if the close button was clicked
+        if ((e.target instanceof HTMLElement) && e.target.classList.contains('chat-widget-teaser-close')) return;
+        openChatPanel();
+      });
+    }
+
+    // Teaser close button
+    if (chatWidgetTeaserClose && chatWidgetTeaser) {
+      chatWidgetTeaserClose.addEventListener('click', (e) => {
+        e.stopPropagation();
+        chatWidgetTeaser.classList.add('is-hidden');
       });
     }
 
@@ -523,7 +558,7 @@
       chatMessages.scrollTop = chatMessages.scrollHeight;
     };
 
-    const CHAT_API_BASE = window.API_BASE || 'https://mariners-chatbot.cloud';
+    const CHAT_API_BASE = window.API_BASE || 'http://localhost:4000';
 
     const sendToChatbot = async (message) => {
       try {
@@ -569,10 +604,12 @@
         overlay.innerHTML = `
           <div class="gallery-lightbox-inner" role="dialog" aria-modal="true">
             <button type="button" class="gallery-lightbox-close" aria-label="Close image">&times;</button>
+            <button type="button" class="gallery-lightbox-nav gallery-lightbox-prev" aria-label="Previous image">&#10094;</button>
             <img src="" alt="" />
+            <button type="button" class="gallery-lightbox-nav gallery-lightbox-next" aria-label="Next image">&#10095;</button>
             <div class="gallery-lightbox-caption">
               <span class="caption-text"></span>
-              <small class="caption-hint">Click outside or press Esc to close</small>
+              <small class="caption-hint">Click outside, use arrows, or press Esc to close</small>
             </div>
           </div>`;
         document.body.appendChild(overlay);
@@ -581,11 +618,27 @@
       const imgEl = overlay.querySelector('img');
       const captionText = overlay.querySelector('.caption-text');
       const closeBtn = overlay.querySelector('.gallery-lightbox-close');
+      const prevBtn = overlay.querySelector('.gallery-lightbox-prev');
+      const nextBtn = overlay.querySelector('.gallery-lightbox-next');
 
-      const openOverlay = (src, alt) => {
+      const thumbArray = Array.from(thumbs);
+      let currentIndex = 0;
+
+      const openOverlayAtIndex = (index) => {
+        if (!thumbArray.length) return;
+        if (index < 0) index = thumbArray.length - 1;
+        if (index >= thumbArray.length) index = 0;
+        currentIndex = index;
+
+        const thumb = thumbArray[currentIndex];
+        const img = thumb.querySelector('img');
+        const src = (img && img.src) || thumb.getAttribute('href') || '';
+        const alt = (img && img.alt) || '';
+
         if (imgEl) imgEl.src = src;
-        if (imgEl) imgEl.alt = alt || '';
-        if (captionText) captionText.textContent = alt || '';
+        if (imgEl) imgEl.alt = alt;
+        if (captionText) captionText.textContent = alt;
+
         overlay.classList.add('is-open');
         document.body.classList.add('modal-open');
       };
@@ -598,9 +651,8 @@
       thumbs.forEach((thumb) => {
         thumb.addEventListener('click', (e) => {
           e.preventDefault();
-          const img = thumb.querySelector('img');
-          if (!img) return;
-          openOverlay(img.src || thumb.getAttribute('href'), img.alt);
+          const index = thumbArray.indexOf(thumb);
+          openOverlayAtIndex(index === -1 ? 0 : index);
         });
       });
 
@@ -614,14 +666,92 @@
         closeBtn.addEventListener('click', () => closeOverlay());
       }
 
+      if (prevBtn) {
+        prevBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openOverlayAtIndex(currentIndex - 1);
+        });
+      }
+
+      if (nextBtn) {
+        nextBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openOverlayAtIndex(currentIndex + 1);
+        });
+      }
+
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && overlay.classList.contains('is-open')) {
+        if (!overlay.classList.contains('is-open')) return;
+        if (e.key === 'Escape') {
           closeOverlay();
+        } else if (e.key === 'ArrowRight') {
+          openOverlayAtIndex(currentIndex + 1);
+        } else if (e.key === 'ArrowLeft') {
+          openOverlayAtIndex(currentIndex - 1);
         }
       });
     };
 
     initGalleryLightbox();
+
+    // Typed cursive animation for About LinkHotel phrases
+    const initAboutTyping = () => {
+      const target = document.getElementById('about-typed-text');
+      if (!target) return;
+
+      const phrases = [
+        'Effortless check in',
+        'Smart assistance',
+        'Seamless coordination',
+        'Minimalist luxury'
+      ];
+
+      let phraseIndex = 0;
+      let charIndex = 0;
+      let deleting = false;
+
+      const typeSpeed = 90;
+      const eraseSpeed = 60;
+      const holdTime = 1500;
+
+      const tick = () => {
+        const current = phrases[phraseIndex];
+
+        if (!deleting) {
+          // typing
+          target.textContent = current.slice(0, charIndex + 1);
+          charIndex++;
+
+          if (charIndex === current.length) {
+            // hold full phrase, then start deleting
+            setTimeout(() => {
+              deleting = true;
+              tick();
+            }, holdTime);
+            return;
+          }
+
+          setTimeout(tick, typeSpeed);
+        } else {
+          // deleting
+          target.textContent = current.slice(0, charIndex - 1);
+          charIndex--;
+
+          if (charIndex === 0) {
+            deleting = false;
+            phraseIndex = (phraseIndex + 1) % phrases.length;
+            setTimeout(tick, typeSpeed);
+            return;
+          }
+
+          setTimeout(tick, eraseSpeed);
+        }
+      };
+
+      tick();
+    };
+
+    initAboutTyping();
   </script>
 </body>
 </html>

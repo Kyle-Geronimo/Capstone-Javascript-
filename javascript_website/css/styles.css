@@ -406,6 +406,7 @@ html, body {
 /* Styles moved from inline <style> in index.html */
 .public-only { display: none; }
 .restricted { display: none; }
+.nav-btn.admin-only { display: none; }
 .auth-nav, .user-nav { display: inline-flex; gap: 1rem; }
 nav { display: flex; align-items: center; gap: 1.5rem; }
 
@@ -447,6 +448,7 @@ nav { display: flex; align-items: center; gap: 1.5rem; }
   background: #fff;
   color:#1f4ea6;
   box-shadow: 0 1px 0 rgba(0,0,0,0.03);
+  cursor: pointer;
 }
 .action-btn.primary { background: linear-gradient(135deg,#4f8cff 0%,#6ed6ff 100%); color:#fff; border-color:transparent; }
 .action-btn.secondary { background:#f3f5fb; color:#1f4ea6; border:1px solid #e9f0ff; }
@@ -866,6 +868,13 @@ nav {
     gap: 1rem;
 }
 
+.nav-toggle {
+    display: none;
+    border: none;
+    background: transparent;
+    padding: 0;
+}
+
 /* Header-specific container: align brand and nav on the same grid as main content */
 header .container {
     max-width: 1100px;
@@ -913,11 +922,54 @@ header .container {
     flex-direction: row;
     gap: 0.75rem;
   }
-  nav {
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    justify-content: flex-end;
+  .nav-toggle {
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 40px;
+    height: 40px;
+    margin-left: auto;
+    border-radius: 999px;
+    border: none;
+    background: rgba(15, 23, 42, 0.18);
+    cursor: pointer;
+    padding: 0;
   }
+
+  .nav-toggle-bar {
+    width: 20px;
+    height: 2px;
+    border-radius: 999px;
+    background: #f9fbff;
+    margin: 2px 0;
+    transition: transform 0.18s ease, opacity 0.18s ease;
+  }
+
+  /* Collapse nav into dropdown panel on mobile */
+  header nav {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: 0;
+    padding: 0.5rem 1rem 0.75rem;
+    background: linear-gradient(180deg, rgba(15,23,42,0.98), rgba(15,23,42,0.9));
+    display: none;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+    box-shadow: 0 12px 28px rgba(15,23,42,0.45);
+    z-index: 60;
+  }
+
+  body.nav-open header nav {
+    display: flex;
+  }
+
+  header .container {
+    position: relative;
+  }
+
   .nav-btn {
     padding: 6px 12px;
     font-size: 0.9rem;
@@ -1065,6 +1117,86 @@ header .container {
     outline: none;
     border-color: #4f8cff;
     box-shadow: 0 0 0 2px rgba(79,140,255,0.1);
+}
+
+/* Payroll status banner on profile page */
+.payroll-status {
+  margin-bottom: 0.85rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  background: #0f172a;
+  color: #e5edff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.35);
+}
+
+.payroll-status-success {
+  background: linear-gradient(135deg, #16a34a, #4ade80);
+  color: #ecfdf5;
+}
+
+.payroll-status-warning {
+  background: linear-gradient(135deg, #f97316, #fed7aa);
+  color: #422006;
+}
+
+.payroll-status-error {
+  background: linear-gradient(135deg, #b91c1c, #fecaca);
+  color: #fef2f2;
+}
+
+.payroll-status-info {
+  background: linear-gradient(135deg, #2563eb, #93c5fd);
+  color: #eff6ff;
+}
+
+/* Chat widget teaser bubble */
+.chat-widget-teaser {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 5.5rem; /* sits above the circular chat button */
+  max-width: 260px;
+  padding: 0.55rem 0.75rem 0.55rem 0.85rem;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #e5edff;
+  font-size: 0.85rem;
+  box-shadow: 0 18px 40px rgba(15,23,42,0.4);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  z-index: 1300;
+}
+
+.chat-widget-teaser-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-widget-teaser-close {
+  border: none;
+  background: transparent;
+  color: #e5edff;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0 0.2rem;
+}
+
+.chat-widget-teaser.is-hidden {
+  display: none;
+}
+
+@media (max-width: 520px) {
+  .chat-widget-teaser {
+    right: 1rem;
+    bottom: 5.25rem;
+    max-width: 220px;
+    font-size: 0.8rem;
+  }
 }
 
 .modal .button-group {
@@ -4518,6 +4650,37 @@ main {
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.6);
 }
 
+.gallery-lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(15, 23, 42, 0.82);
+  color: #e5edff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.7);
+  padding: 0;
+}
+
+.gallery-lightbox-prev {
+  left: 12px;
+}
+
+.gallery-lightbox-next {
+  right: 12px;
+}
+
+.gallery-lightbox-nav:hover {
+  background: rgba(30, 64, 175, 0.95);
+}
+
 .gallery-lightbox-close:hover {
   background: rgba(30, 64, 175, 0.9);
 }
@@ -4545,15 +4708,62 @@ main {
   opacity: 0.8;
 }
 
+/* Lightbox + gallery responsiveness */
+@media (max-width: 768px) {
+  .gallery-lightbox-inner {
+    max-width: 100vw;
+    max-height: 82vh;
+    border-radius: 14px;
+  }
+
+  .gallery-lightbox-inner img {
+    max-height: 72vh;
+  }
+
+  .gallery-lightbox-caption {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    font-size: 0.82rem;
+    gap: 0.35rem;
+  }
+
+  .gallery-lightbox-nav {
+    width: 38px;
+    height: 38px;
+    font-size: 1.4rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .gallery-lightbox-inner {
+    max-width: 100vw;
+    max-height: 80vh;
+    border-radius: 10px;
+  }
+
+  .gallery-lightbox-caption {
+    font-size: 0.78rem;
+  }
+
+  /* Make gallery thumbnails slightly shorter on very small devices */
+  .dmariners-album img,
+  .wennrod-album img,
+  .bicotels-album img {
+    height: 150px !important;
+  }
+}
+
 /* -----------------------------
    Chatbot page - Reservation dashboard layout
    (Guest Records + Reports & Analytics)
    ----------------------------- */
 
 .reservation-dashboard {
-  max-width: 1280px;
-  margin: 1.5rem auto 1.5rem;
-  padding: 0 10px;
+  width: 100%;
+  max-width: 100%;
+  margin: 1.5rem 0;
+  padding: 0;
   display: block;
 }
 

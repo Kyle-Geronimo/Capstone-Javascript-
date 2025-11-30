@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HotelLink - Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../image/logo/HTLogo.png">
+  <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body class="chatbot-page">
+  <header>
+    <div class="container">
+      <h1>Dashboard</h1>
+      <nav style="visibility:hidden;">
+        <a href="../index2.html" class="nav-btn restricted">Home</a>
+        <a href="chatbot.html" class="nav-btn restricted">Chatbot Data</a>
+        <a href="dashboard.html" class="nav-btn restricted">Dashboard</a>
+        <a href="admin.html" class="nav-btn restricted admin-only" style="display:none;">Admin</a>
+        <a href="payroll.html" class="nav-btn restricted admin-only" style="display:none;">Payroll</a>
+        <a href="profile.html" class="nav-btn restricted">Profile</a>
+        <a href="#" id="logout-btn" class="nav-btn restricted">Logout</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div id="reservation-dashboard" class="reservation-dashboard" aria-live="polite"></div>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p style="text-align: center;">&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script type="module">
+    import { auth } from '../js/firebase-config.js';
+    import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
+    import { initReservationDashboard } from '../js/chatbot.js';
+    import { logout } from '../js/auth.js';
+
+    auth.onAuthStateChanged((user) => {
+      updateNavVisibility();
+      highlightActiveNavBtn();
+
+      const container = document.getElementById('reservation-dashboard');
+      if (!user) {
+        if (container) {
+          container.innerHTML = '<div class="auth-message"><p>Please log in to view the dashboard.</p></div>';
+        }
+
+        setTimeout(() => {
+          window.location.href = 'login.html';
+        }, 2000);
+        return;
+      }
+
+      initReservationDashboard();
+    });
+
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          await logout();
+        } catch (err) {
+          console.error('Logout failed from dashboard:', err);
+        }
+      });
+    }
+  </script>
+</body>
+</html>

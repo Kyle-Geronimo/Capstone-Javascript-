@@ -12,19 +12,17 @@
   <header>
     <div class="container">
       <h1>HotelLink</h1>
-      <nav>
+      <nav style="visibility:hidden;">
         <a href="../index2.html" class="nav-btn restricted">Home</a>
         <a href="chatbot.html" class="nav-btn restricted">Chatbot Data</a>
-        <a href="admin.html" class="nav-btn restricted admin-only">Admin</a>
-        <a href="payroll.html" class="nav-btn restricted admin-only">Payroll</a>
+        <a href="dashboard.html" class="nav-btn restricted">Dashboard</a>
+        <a href="admin.html" class="nav-btn restricted admin-only" style="display:none;">Admin</a>
+        <a href="payroll.html" class="nav-btn restricted admin-only" style="display:none;">Payroll</a>
         <a href="profile.html" class="nav-btn restricted">Profile</a>
+        <a href="#" id="logout-btn" class="nav-btn restricted">Logout</a>
       </nav>
     </div>
   </header>
-
-  <!-- New reservation dashboard (Guest Records + Reports & Analytics) -->
-  <div id="reservation-dashboard" class="reservation-dashboard" aria-live="polite"></div>
-
   <ul id="chatbot-data" class="chat-list" aria-live="polite">
     <!-- JS will inject <li class="chat-item"> entries here -->
   </ul>
@@ -35,15 +33,15 @@
 
   <footer>
     <div class="container">
-      <p>&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>
+      <p style="text-align: center;">&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>
     </div>
   </footer>
 
   <script type="module">
     import { auth } from '../js/firebase-config.js';
     import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
-    import { loadChatbotData, initReservationDashboard } from '../js/chatbot.js';
-
+    import { loadChatbotData } from '../js/chatbot.js';
+    import { logout } from '../js/auth.js';
 
     auth.onAuthStateChanged((user) => {
       updateNavVisibility();
@@ -64,8 +62,19 @@
 
 
       loadChatbotData();
-      initReservationDashboard();
     });
+
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          await logout();
+        } catch (err) {
+          console.error('Logout failed from chatbot:', err);
+        }
+      });
+    }
   </script>
 </body>
 </html>

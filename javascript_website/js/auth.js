@@ -34,15 +34,6 @@ function initializeAuthState() {
                 authButtons.style.display = 'none';
             }
 
-            // If on public home page while logged in, send user to staff/internal home (index2.html)
-            const path = window.location.pathname || '';
-            const isPublicHome = path === '/' || path === '' || path.endsWith('/index.html') || path.endsWith('index.html');
-            const isStaffHome = path.endsWith('/index2.html') || path.endsWith('index2.html');
-            if (isPublicHome && !isStaffHome) {
-                window.location.href = '/index2.html';
-                return;
-            }
-
             // If on login page, redirect staff to internal home (index2.html)
             if (window.location.pathname.includes('login.html')) {
                 window.location.href = '../index2.html';
@@ -68,19 +59,21 @@ function initializeAuthState() {
                 authButtons.style.display = 'flex';
             }
             
-                        // If on restricted page, redirect to login — but allow unauthenticated
-                        // users to remain on the public home page (root or index.html)
-                        const currentPath = window.location.pathname;
-                        const isPublicPage = currentPath.endsWith('index.html') ||
+            // If on restricted page, redirect to login — but allow unauthenticated
+            // users to remain on the public home page (root or index.html)
+            const currentPath = window.location.pathname;
+            const isRoot = currentPath === '/' || currentPath === '';
+            const isPublicPage = isRoot ||
+                            currentPath.endsWith('index.html') ||
                             currentPath.includes('login.html') || 
                             currentPath.includes('signup.html') ||
                             currentPath.includes('reset-password.html');
-                        
-                        if (!isPublicPage) {
-                            // Get the correct relative path to login page
-                            const isInPagesDir = currentPath.includes('/pages/');
-                            window.location.href = isInPagesDir ? 'login.html' : 'pages/login.html';
-                        }
+
+            if (!isPublicPage) {
+                // Get the correct relative path to login page
+                const isInPagesDir = currentPath.includes('/pages/');
+                window.location.href = isInPagesDir ? 'login.html' : 'pages/login.html';
+            }
         }
         
         // Update navigation

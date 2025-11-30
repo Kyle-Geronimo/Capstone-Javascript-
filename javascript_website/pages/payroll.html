@@ -13,54 +13,34 @@
   <header>
     <div class="container">
       <h1>HotelLink</h1>
-      <nav>
-        <a href="../index2.html" class="nav-btn">Home</a>
+      <nav style="visibility:hidden;">
+        <a href="../index2.html" class="nav-btn restricted">Home</a>
         <a href="chatbot.html" class="nav-btn restricted">Chatbot Data</a>
-        <a href="admin.html" class="nav-btn restricted admin-only">Admin</a>
-        <a href="payroll.html" class="nav-btn restricted admin-only">Payroll</a>
+        <a href="dashboard.html" class="nav-btn restricted">Dashboard</a>
+        <a href="admin.html" class="nav-btn restricted admin-only" style="display:none;">Admin</a>
+        <a href="payroll.html" class="nav-btn restricted admin-only" style="display:none;">Payroll</a>
         <a href="profile.html" class="nav-btn restricted">Profile</a>
+        <a href="#" id="logout-btn" class="nav-btn restricted">Logout</a>
       </nav>
     </div>
   </header>
 
   <main class="container page">
     <h2>Payroll</h2>
+    <div class="payroll-period">
+      <label>
+        Period start
+        <input type="date" id="periodStart">
+      </label>
+      <label>
+        Period end
+        <input type="date" id="periodEnd">
+      </label>
+    </div>
 
     <div class="payroll-actions">
       <div class="group">
-        <label>Period start: <input type="date" id="periodStart"></label>
-        <label>Period end: <input type="date" id="periodEnd"></label>
-
         <button id="loadUsersBtn" class="action-btn">Reload Table</button>
-
-        <label class="action-btn file-import-label">
-          Import tabulation
-          <input id="importXlsx" type="file" accept=".xlsx,.xls" />
-        </label>
-        <span id="importStatus" class="sss-status"></span>
-        <button id="reloadSssTableBtn" class="action-btn ml-8">Reload SSS Table</button>
-
-        <div id="sssModalBackdrop" class="sss-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="sssModalTitle">
-          <div class="sss-modal" role="document">
-            <div class="sss-modal-header">
-              <div class="sss-modal-title" id="sssModalTitle">Import preview — SSS tabulation</div>
-              <div class="controls sss-controls">
-                <button id="sssModalClose" class="sss-close" title="Close (Esc)">✕</button>
-              </div>
-            </div>
-
-            <div class="sss-modal-body" id="sssModalBody">
-              <div id="sssPreviewInfo"></div>
-              <div id="sssPreviewTableContainer"></div>
-              <div id="sssPreviewWarn"></div>
-            </div>
-
-            <div class="sss-modal-footer">
-              <button id="sssCancelBtn" class="sss-btn secondary">Cancel</button>
-              <button id="sssConfirmBtn" class="sss-btn">Confirm & Save</button>
-            </div>
-          </div>
-        </div>
       </div>
 
       <div class="group">
@@ -73,39 +53,18 @@
 
       <div class="group ml-auto">
         <button id="saveRunBtn" class="action-btn primary">Save Payroll Run</button>
-        <button id="exportCsvBtn" class="action-btn">Export CSV</button>
+        <button id="exportPdfBtn" class="action-btn">Export PDF</button>
         <span class="small-note ml-8">Rows: <strong id="rowsCount">0</strong></span>
       </div>
     </div>
 
-    <!-- Holiday pickers: centered and fixed width -->
-    <div id="holidayPickers" class="holiday-pickers">
-      <div class="holiday-card">
-        <h3>Regular Holidays</h3>
-        <div id="regHolidayCalendar" class="small-calendar"></div>
-        <div class="calendar-actions">
-          <button id="regPrevMonth">◀</button>
-          <span id="regMonthLabel"></span>
-          <button id="regNextMonth">▶</button>
-          <button id="clearRegHolidays" title="Clear all regular holidays">Clear</button>
-        </div>
-        <div class="calendar-hint">Click a date to toggle. Picked days will be used as Regular Holidays.</div>
+    <!-- Payroll quick tools: search -->
+    <section class="payroll-toolbar" aria-label="Payroll tools">
+      <div class="toolbar-left">
+        <label for="payrollSearch" class="toolbar-label">Search employee (username):</label>
+        <input id="payrollSearch" type="search" class="toolbar-input" placeholder="Search by username..." />
       </div>
-
-      <div class="holiday-card">
-        <h3>Special Holidays</h3>
-        <div id="specHolidayCalendar" class="small-calendar"></div>
-        <div class="calendar-actions">
-          <button id="specPrevMonth">◀</button>
-          <span id="specMonthLabel"></span>
-          <button id="specNextMonth">▶</button>
-          <button id="clearSpecHolidays" title="Clear all special holidays">Clear</button>
-        </div>
-        <div class="calendar-hint">Click a date to toggle. Picked days will be used as Special Holidays.</div>
-      </div>
-    </div>
-
-    <div id="holidayStatus"></div>
+    </section>
 
     <div id="status" class="small-note" aria-live="polite"></div>
 
@@ -117,6 +76,7 @@
             <th>Username</th>
             <th>Rate</th>
             <th>Days</th>
+            <th>Basic Total</th>
             <th>Hours (auto)</th>
             <th>ND hrs</th>
             <th>ND-on-OT hrs</th>
@@ -145,6 +105,84 @@
       </table>
     </div>
 
+    <div class="payroll-footer">
+      <button id="payrollViewLess" class="action-btn small" type="button">View less</button>
+      <button id="payrollViewMore" class="action-btn small" type="button">View more</button>
+    </div>
+
+    <!-- Attendance Dashboard (QR-based) -->
+    <section class="attendance-dashboard" aria-label="Attendance dashboard">
+      <header class="attendance-header">
+        <div>
+          <h3>Attendance Dashboard</h3>
+          <p class="attendance-subtitle">QR time-in / time-out records for employees and admins</p>
+        </div>
+        <div class="attendance-filters">
+          <label for="attendanceSearch" class="toolbar-label">Search by username:</label>
+          <input id="attendanceSearch" type="search" class="toolbar-input" placeholder="Search attendance..." />
+          <div class="attendance-date-filter">
+            <label for="attendanceDateFilter" class="toolbar-label">Date filter:</label>
+            <select id="attendanceDateFilter" class="toolbar-select">
+              <option value="today">Today</option>
+              <option value="last7days">Last 7 days</option>
+              <option value="all">All</option>
+            </select>
+          </div>
+        </div>
+      </header>
+
+      <div class="table-wrap attendance-table-wrap">
+        <table class="data-table" id="attendanceTable" aria-label="Attendance table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Username</th>
+              <th>Role</th>
+              <th>Time-in</th>
+              <th>Time-out</th>
+              <th>Total hours</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="attendanceBody"></tbody>
+        </table>
+      </div>
+
+      <div class="attendance-footer">
+        <div class="attendance-meta">
+          <span class="small-note">Rows: <strong id="attendanceRowsCount">0</strong></span>
+        </div>
+        <div class="attendance-pagination">
+          <button id="attendanceViewLess" class="action-btn small" type="button">View less</button>
+          <button id="attendanceViewMore" class="action-btn small" type="button">View more</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Attendance edit/delete modal -->
+    <div id="attendanceModalBackdrop" class="attendance-modal-backdrop hidden" aria-hidden="true">
+      <div class="attendance-modal" role="dialog" aria-modal="true" aria-labelledby="attendanceModalTitle">
+        <h3 id="attendanceModalTitle">Edit attendance</h3>
+        <p id="attendanceModalMessage" class="attendance-modal-message"></p>
+
+        <div id="attendanceModalEditFields" class="attendance-modal-fields">
+          <label>
+            Time-in
+            <input type="datetime-local" id="attendanceEditTimeIn">
+          </label>
+          <label>
+            Time-out
+            <input type="datetime-local" id="attendanceEditTimeOut">
+          </label>
+        </div>
+
+        <div class="attendance-modal-actions">
+          <button id="attendanceModalCancel" type="button" class="action-btn small secondary">Cancel</button>
+          <button id="attendanceModalPrimary" type="button" class="action-btn small primary">Save</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Payroll loading overlay -->
     <div id="payrollLoadingOverlay" class="hidden" aria-hidden="true">
       <div class="payroll-loading-backdrop"></div>
@@ -166,6 +204,9 @@
 
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/shim.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
   <script type="module" src="../js/payroll.js"></script>
 
   <!-- Include the small UI enhancement script AFTER payroll.js (rebind helper exposed by payroll-ui.js) -->
@@ -174,6 +215,7 @@
   <script type="module">
     import { auth, getUserRole } from '../js/firebase-config.js';
     import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
+    import { logout } from '../js/auth.js';
 
     // ensure nav visibility helpers run
     updateNavVisibility();
@@ -205,6 +247,18 @@
         setTimeout(() => { if (typeof window.rebindPayrollUI === 'function') window.rebindPayrollUI(); }, 800);
       });
     });
+
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          await logout();
+        } catch (err) {
+          console.error('Logout failed from payroll page:', err);
+        }
+      });
+    }
   </script>
 
 </body>
