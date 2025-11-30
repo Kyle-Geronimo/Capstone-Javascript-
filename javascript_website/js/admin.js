@@ -33,7 +33,7 @@ if (typeof deleteDoc === 'undefined') {
 }
 
 // API base URL - set `window.API_BASE` on the page if you run the admin API on a different host/port.
-const API_BASE = (window.API_BASE && window.API_BASE.replace(/\/$/, '')) || 'http://localhost:3000';
+const API_BASE = (window.API_BASE && window.API_BASE.replace(/\/$/, '')) || 'https://mariners-hotellink.com';
 
 export function watchRequestsRealtime() {
   const container = document.getElementById('requests');
