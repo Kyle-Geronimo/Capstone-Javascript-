@@ -269,7 +269,7 @@
         }
 
         // Import Firestore helpers (we still import getDocs because profile uses it)
-        const { addDoc, collection, query, where, onSnapshot, serverTimestamp, doc, getDoc, getDocs } =
+        const { addDoc, collection, query, where, onSnapshot, serverTimestamp, doc, getDoc, getDocs, updateDoc } =
           await import('https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js');
 
         // Role-based guard: only admins can see payroll on profile
@@ -314,7 +314,7 @@
             const uSnap = await getDoc(uRef);
             const uData = uSnap.exists() ? uSnap.data() : {};
             if (uData && uData.payrollViewAllowed) {
-              // Enforce 24-hour visibility window based on payrollViewAllowedAt
+              // Enforce 12-hour visibility window based on payrollViewAllowedAt
               const allowedAt = uData.payrollViewAllowedAt || null;
               let withinWindow = false;
               if (allowedAt) {
@@ -328,7 +328,7 @@
                 }
                 if (ts && Number.isFinite(ts)) {
                   const ageMs = Date.now() - ts;
-                  const windowMs = 24 * 60 * 60 * 1000; // 24 hours
+                  const windowMs = 12 * 60 * 60 * 1000; // 12 hours
                   withinWindow = ageMs >= 0 && ageMs <= windowMs;
                 }
               }
@@ -341,7 +341,13 @@
                   console.error('Auto-load payroll failed:', autoErr);
                 }
               } else {
-                console.log('payrollViewAllowed flag exists but is outside the 24-hour window; not auto-loading payroll.');
+                console.log('payrollViewAllowed flag exists but is outside the 12-hour window; not auto-loading payroll.');
+                try {
+                  const uRefReset = doc(db, 'users', currentUser.uid);
+                  await updateDoc(uRefReset, { payrollViewAllowed: false });
+                } catch (resetErr) {
+                  console.error('Failed to clear expired payrollViewAllowed flag:', resetErr);
+                }
               }
             }
           }
