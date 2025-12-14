@@ -111,12 +111,12 @@
       <button id="payrollViewMore" class="action-btn small" type="button">View more</button>
     </div>
 
-    <!-- Attendance Dashboard (QR-based) - removed from admin payroll view -->
-    <section class="attendance-dashboard" aria-label="Attendance dashboard" style="display:none;">
+    <!-- Attendance Dashboard (QR-based) - now visible on admin payroll view -->
+    <section class="attendance-dashboard" aria-label="Attendance dashboard">
       <header class="attendance-header">
         <div>
-          <h3>Attendance Dashboard</h3>
-          <p class="attendance-subtitle">QR time-in / time-out records for employees and admins</p>
+          <h3>Today&#39;s Attendance</h3>
+          <p class="attendance-subtitle">Live QR time-in / time-out records for today</p>
         </div>
         <div class="attendance-filters">
           <label for="attendanceSearch" class="toolbar-label">Search by username:</label>
@@ -137,12 +137,10 @@
           <thead>
             <tr>
               <th>#</th>
-              <th>Username</th>
-              <th>Role</th>
-              <th>Time-in</th>
-              <th>Time-out</th>
-              <th>Total hours</th>
-              <th>Actions</th>
+              <th>Name</th>
+              <th>Time in</th>
+              <th>Time out</th>
+              <th>Total</th>
             </tr>
           </thead>
           <tbody id="attendanceBody"></tbody>

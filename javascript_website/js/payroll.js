@@ -52,6 +52,9 @@ let filteredAttendanceRows = [];
 let attendanceVisibleCount = 5;
 const ATTENDANCE_PAGE_STEP = 5;
 
+// keep a handle to the live Firestore listener for attendance so we can rebind safely
+let attendanceUnsubscribe = null;
+
 let attendanceModalState = {
   mode: null, // 'edit' | 'delete'
   rowId: null
@@ -2467,108 +2470,104 @@ if (payrollViewLessBtn) {
 }
 
 // -----------------------------
-// Attendance dashboard helpers (read-only list + search/pagination)
+// Attendance dashboard helpers (live today-only view + search/pagination)
 // -----------------------------
-async function loadAttendanceDashboard(range = 'today') {
+function loadAttendanceDashboard(range = 'today') {
   if (!attendanceBody) return;
+
+  // The UI still exposes a date range select, but the requirement is for a
+  // real-time view that resets every day. We therefore always bind a
+  // today-only listener so records automatically roll over when the date
+  // changes.
+
   try {
+    // clear any previous listener before attaching a new one
+    if (typeof attendanceUnsubscribe === 'function') {
+      attendanceUnsubscribe();
+      attendanceUnsubscribe = null;
+    }
+
     attendanceBody.innerHTML = '';
     if (attendanceRowsCountEl) attendanceRowsCountEl.textContent = '0';
 
     const attRef = collection(db, 'attendance');
 
-    // determine date range
-    let startIso = null;
     const now = new Date();
-    if (range === 'today') {
-      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      startIso = start.toISOString();
-    } else if (range === 'last7days') {
-      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6); // last 7 days including today
-      startIso = start.toISOString();
-    }
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const startIso = start.toISOString();
+    const endIso = end.toISOString();
 
-    let attQ;
-    if (startIso) {
-      attQ = query(attRef,
-        where('rawTime', '>=', startIso),
-        orderBy('rawTime', 'desc'),
-        limit(200)
-      );
-    } else {
-      attQ = query(attRef, orderBy('rawTime', 'desc'), limit(200));
-    }
-    const snap = await getDocs(attQ);
+    const attQ = query(
+      attRef,
+      where('rawTime', '>=', startIso),
+      where('rawTime', '<', endIso),
+      orderBy('rawTime', 'desc'),
+      limit(200)
+    );
 
-    // Group attendance by user + calendar day so time-in and time-out
-    // appear on the same row in the dashboard.
-    const groups = new Map();
+    attendanceUnsubscribe = onSnapshot(attQ, (snap) => {
+      const groups = new Map();
 
-    snap.docs.forEach(d => {
-      const data = d.data() || {};
-      const userId = data.userId || null;
-      const username = data.username || data.email || '';
+      snap.docs.forEach(d => {
+        const data = d.data() || {};
+        const userId = data.userId || null;
+        const username = data.username || data.email || '';
+        const mode = data.mode || '';
+        const ts = data.recordedTime || data.rawTime || null;
+        if (!ts) return;
+        const dayKey = ts.slice(0, 10); // YYYY-MM-DD
 
-      // Prefer role stored on the attendance record; otherwise, fall back to the user profile role
-      let role = data.role || '';
-      if (!role && Array.isArray(usersList) && userId) {
-        const u = usersList.find(u => (u.userId || u.id) === userId);
-        if (u && u.role) role = u.role;
-      }
-      if (!role) role = 'employee';
-      const mode = data.mode || '';
-      const ts = data.recordedTime || data.rawTime || null;
-      if (!ts) return;
-      const dayKey = ts.slice(0, 10); // YYYY-MM-DD
-
-      const key = `${userId || 'unknown'}|${dayKey}`;
-      let g = groups.get(key);
-      if (!g) {
-        g = {
-          id: key,
-          userId,
-          username,
-          role,
-          dayKey,
-          timeIn: null,
-          timeOut: null,
-          timeInDocId: null,
-          timeOutDocId: null
-        };
-        groups.set(key, g);
-      }
-
-      // Assign earliest scan as time-in, latest as time-out when modes are missing
-      if (mode === 'time-in') {
-        if (!g.timeIn || ts < g.timeIn) {
-          g.timeIn = ts;
-          g.timeInDocId = d.id;
+        const key = `${userId || 'unknown'}|${dayKey}`;
+        let g = groups.get(key);
+        if (!g) {
+          g = {
+            id: key,
+            userId,
+            username,
+            dayKey,
+            timeIn: null,
+            timeOut: null,
+            timeInDocId: null,
+            timeOutDocId: null
+          };
+          groups.set(key, g);
         }
-      } else if (mode === 'time-out') {
-        if (!g.timeOut || ts > g.timeOut) {
-          g.timeOut = ts;
-          g.timeOutDocId = d.id;
+
+        // Assign earliest scan as time-in, latest as time-out when modes are missing
+        if (mode === 'time-in') {
+          if (!g.timeIn || ts < g.timeIn) {
+            g.timeIn = ts;
+            g.timeInDocId = d.id;
+          }
+        } else if (mode === 'time-out') {
+          if (!g.timeOut || ts > g.timeOut) {
+            g.timeOut = ts;
+            g.timeOutDocId = d.id;
+          }
+        } else {
+          // Fallback: if mode is missing, treat first as time-in, second as time-out
+          if (!g.timeIn) {
+            g.timeIn = ts;
+            g.timeInDocId = d.id;
+          } else if (!g.timeOut) {
+            g.timeOut = ts;
+            g.timeOutDocId = d.id;
+          }
         }
-      } else {
-        // Fallback: if mode is missing, treat first as time-in, second as time-out
-        if (!g.timeIn) {
-          g.timeIn = ts;
-          g.timeInDocId = d.id;
-        } else if (!g.timeOut) {
-          g.timeOut = ts;
-          g.timeOutDocId = d.id;
-        }
-      }
+      });
+
+      attendanceRows = Array.from(groups.values()).sort((a, b) => {
+        const at = a.timeOut || a.timeIn || '';
+        const bt = b.timeOut || b.timeIn || '';
+        return bt.localeCompare(at);
+      });
+
+      attendanceVisibleCount = ATTENDANCE_PAGE_STEP;
+      renderAttendanceTable();
+    }, (err) => {
+      console.error('attendance dashboard live listener error', err);
     });
-
-    attendanceRows = Array.from(groups.values()).sort((a, b) => {
-      const at = a.timeOut || a.timeIn || '';
-      const bt = b.timeOut || b.timeIn || '';
-      return bt.localeCompare(at);
-    });
-
-    attendanceVisibleCount = ATTENDANCE_PAGE_STEP;
-    renderAttendanceTable();
   } catch (err) {
     console.error('loadAttendanceDashboard error', err);
   }
@@ -2597,49 +2596,38 @@ function renderAttendanceTable() {
     const timeIn = r.timeIn;
     const timeOut = r.timeOut;
 
-    const formatDateTime = (iso) => {
+    const formatTime = (iso) => {
       if (!iso) return '';
       const d = new Date(iso);
       if (Number.isNaN(d.getTime())) return '';
-      return d.toLocaleString(undefined, {
-        year: 'numeric', month: 'short', day: '2-digit',
-        hour: '2-digit', minute: '2-digit'
+      return d.toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
       });
     };
+
+    let totalHoursText = '';
+    if (timeIn && timeOut) {
+      const start = new Date(timeIn);
+      const end = new Date(timeOut);
+      if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end > start) {
+        const diffMs = end.getTime() - start.getTime();
+        const hours = diffMs / (1000 * 60 * 60);
+        // display with up to two decimal places, e.g. "8.00 hrs"
+        totalHoursText = `${hours.toFixed(2)} hrs`;
+      }
+    }
 
     tr.innerHTML = `
       <td>${idx + 1}</td>
       <td>${(r.username || '').toString()}</td>
-      <td>${(r.role || '').toString()}</td>
-      <td>${formatDateTime(timeIn)}</td>
-      <td>${formatDateTime(timeOut)}</td>
-      <td></td>
-      <td>
-        <button type="button" class="action-btn small attendance-edit" data-id="${r.id}">Edit</button>
-        <button type="button" class="action-btn small attendance-delete" data-id="${r.id}">Delete</button>
-      </td>
+      <td>${formatTime(timeIn)}</td>
+      <td>${formatTime(timeOut)}</td>
+      <td>${totalHoursText}</td>
     `;
 
     attendanceBody.appendChild(tr);
-  });
-
-  // wire action buttons
-  attendanceBody.querySelectorAll('.attendance-delete').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.id;
-      if (!id) return;
-      openAttendanceModalDelete(id);
-    });
-  });
-
-  attendanceBody.querySelectorAll('.attendance-edit').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.id;
-      if (!id) return;
-      const row = attendanceRows.find(r => r.id === id);
-      if (!row) return;
-      openAttendanceModalEdit(row);
-    });
   });
 
   if (attendanceRowsCountEl) {
@@ -2670,7 +2658,7 @@ if (attendanceViewLessBtn) {
 if (attendanceRangeSelect) {
   attendanceRangeSelect.addEventListener('change', () => {
     const val = attendanceRangeSelect.value || 'today';
-    loadAttendanceDashboard(val).catch(e => console.warn('attendance range change failed', e));
+    loadAttendanceDashboard(val);
   });
 }
 
