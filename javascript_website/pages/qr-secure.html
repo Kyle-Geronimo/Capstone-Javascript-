@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Secure QR Dashboard — HRIS</title>
+  <link rel="icon" type="image/png" href="../image/logo/HTLogo.png">
+  <link rel="stylesheet" href="../css/styles.css">
+
+  <!-- Firebase SDKs (compat for any legacy scripts) -->
+  <script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore-compat.js"></script>
+  <script type="module" src="../js/auth.js"></script>
+</head>
+<body>
+  <!-- Minimal header: no nav/back buttons, only branding -->
+  <header>
+    <div class="container">
+      <h1>HotelLink</h1>
+    </div>
+  </header>
+
+  <main>
+    <!-- Root container so we can swap between dashboard and logout-only view -->
+    <section id="qr-secure-root" class="form-container chatbot-data-container admin-dashboard">
+      <h2>QR Dashboard</h2>
+
+      <div class="admin-section">
+        <!-- QR Code Scanner (automatic Time In / Time Out) -->
+        <div style="margin-top: 1.5rem;">
+          <h4 style="color: #1f4ea6; margin-top: 0; margin-bottom: 1rem;">QR Code Scanner</h4>
+
+            <div class="scanner-controls">
+              <div style="display:flex; gap:8px; align-items:center;">
+                <span style="font-size:0.9rem;color:#4b5563;font-weight:500;">Mode: Automatic Time In / Time Out</span>
+                <select id="cameraSelect" style="margin-left:8px;"></select>
+              </div>
+
+              <div style="margin-top:8px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                <button id="startCamera">Start</button>
+                <button id="stopCamera">Stop</button>
+                <button id="scanQrBtn">Scan QR</button>
+                <button id="retryCameras">Retry Cameras</button>
+                <input id="uploadQrImage" type="file" accept="image/png,image/jpeg" />
+              </div>
+            </div>
+
+            <div id="cameraPreview" style="width:640px;height:480px;background:#000;margin-top:8px;"></div>
+
+            <div id="scannerStatusLog" style="margin-top:8px; max-height:200px; overflow:auto; border:1px solid #eee; padding:8px;"></div>
+
+            <details style="margin-top:8px;">
+              <summary>Debug Log</summary>
+              <div id="scannerDebugLog" style="max-height:200px; overflow:auto; padding:8px;"></div>
+            </details>
+
+            <p style="margin-top:8px;color:#666;">If no cameras appear, ensure your browser/site permissions allow camera access and try Retry Cameras. If the Html5Qrcode script is blocked by an extension, use the local vendor copy.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p style="text-align: center;">&copy; 2025 D' Mariners Inn Hotel. All rights reserved.</p>
+    </div>
+  </footer>
+  
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" type="text/javascript"></script>
+  <script src="../vendor/html5-qrcode.min.js"></script>
+  <!-- Fallback QR decoder for image uploads -->
+  <script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script>
+    (function(){
+      if (typeof Html5Qrcode === 'undefined') {
+        var s = document.createElement('script');
+        s.src = 'https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js';
+        s.onload = function(){ console.log('Loaded Html5Qrcode from CDN fallback'); };
+        s.onerror = function(){ console.warn('Failed to load Html5Qrcode from CDN (possibly blocked). If blocked, run `npm run copy-vendor` or copy node_modules/html5-qrcode/html5-qrcode.min.js to vendor/html5-qrcode.min.js'); };
+        document.head.appendChild(s);
+      }
+    })();
+  </script>
+
+  <script type="module">
+    import { auth, db } from '../js/firebase-config.js';
+    import { initializeScanner } from '../js/qr.js';
+    import { logout } from '../js/auth.js';
+    import { getDoc, doc } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
+    import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-functions.js';
+
+    const ROOT_ID = 'qr-secure-root';
+    const functions = getFunctions();
+    const sendQrVerificationCode = httpsCallable(functions, 'sendQrVerificationCode');
+    const verifyQrVerificationCode = httpsCallable(functions, 'verifyQrVerificationCode');
+
+    function renderLogoutOnlyView() {
+      const root = document.getElementById(ROOT_ID);
+      if (!root) return;
+      root.innerHTML = `
+        <h2>QR Dashboard (Secure Session Ended)</h2>
+        <p class="small-note" style="margin: 0 0 1rem 0;">For security, this session is closed. Please log in again to access the QR tools.</p>
+        <button id="qrSecureLogout" class="action-btn primary">Logout</button>
+      `;
+      const btn = document.getElementById('qrSecureLogout');
+      if (btn) {
+        btn.addEventListener('click', async () => {
+          try {
+            await logout();
+          } catch (err) {
+            console.error('Logout from secure QR view failed:', err);
+          }
+        });
+      }
+    }
+
+    function waitForHtml5Qrcode(timeoutMs = 7000) {
+      return new Promise((resolve, reject) =>
+      {
+        if (window.Html5Qrcode) return resolve();
+        const start = Date.now();
+        const iv = setInterval(() => {
+          if (window.Html5Qrcode) { clearInterval(iv); return resolve(); }
+          if (Date.now() - start > timeoutMs) {
+            clearInterval(iv);
+            return reject(new Error('Html5Qrcode did not load within ' + timeoutMs + 'ms'));
+          }
+        }, 150);
+      });
+    }
+
+    // Full-screen PIN overlay (same behavior as original qr-dashboard.html)
+    function showPinOverlay(correctPin) {
+      return new Promise((resolve, reject) => {
+        const overlay = document.createElement('div');
+        overlay.id = 'qr-pin-overlay';
+        overlay.style.position = 'fixed';
+        overlay.style.inset = '0';
+        overlay.style.zIndex = '9999';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.background = 'rgba(15,23,42,0.45)';
+        overlay.style.backdropFilter = 'blur(6px)';
+
+        overlay.innerHTML = `
+          <div style="background:#fff;border-radius:16px;padding:24px 28px;max-width:360px;width:100%;box-shadow:0 18px 45px rgba(15,23,42,0.35);text-align:center;">
+            <h2 style="margin:0 0 8px;font-size:1.2rem;color:#111827;">Admin PIN Required</h2>
+            <p style="margin:0 0 16px;font-size:0.9rem;color:#4b5563;">Please enter your 6-digit PIN to access the QR Dashboard.</p>
+            <input id="qr-pin-input" type="password" maxlength="6" inputmode="numeric" autocomplete="off"
+                   style="font-size:1.4rem;letter-spacing:0.4em;text-align:center;padding:8px 12px;border-radius:999px;border:1px solid #d1d5db;width:100%;box-sizing:border-box;" />
+            <div id="qr-pin-error" style="min-height:18px;margin-top:8px;font-size:0.8rem;color:#b91c1c;"></div>
+            <div style="display:flex;gap:8px;justify-content:center;margin-top:16px;">
+              <button id="qr-pin-cancel" type="button" class="action-btn" style="background:#e5e7eb;color:#374151;">Cancel</button>
+              <button id="qr-pin-submit" type="button" class="action-btn primary">Unlock</button>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(overlay);
+        const input = document.getElementById('qr-pin-input');
+        const errEl = document.getElementById('qr-pin-error');
+        const btnSubmit = document.getElementById('qr-pin-submit');
+        const btnCancel = document.getElementById('qr-pin-cancel');
+        const activeCorrectPin = String(correctPin);
+
+        function cleanup(ok) {
+          overlay.remove();
+          ok ? resolve() : reject(new Error('PIN cancelled or invalid'));
+        }
+
+        btnCancel.addEventListener('click', () => cleanup(false));
+
+        function trySubmit() {
+          const val = String(input.value || '').trim();
+          if (!/^\d{6}$/.test(val)) {
+            errEl.textContent = 'PIN must be exactly 6 digits.';
+            return;
+          }
+          if (val !== activeCorrectPin) {
+            errEl.textContent = 'Incorrect PIN.';
+            return;
+          }
+          cleanup(true);
+        }
+
+        btnSubmit.addEventListener('click', trySubmit);
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); trySubmit(); }
+        });
+
+        setTimeout(() => { input.focus(); }, 50);
+      });
+    }
+
+    // Second factor: email verification code overlay
+    function showEmailVerificationOverlay(userEmail) {
+      return new Promise((resolve, reject) => {
+        const overlay = document.createElement('div');
+        overlay.id = 'qr-email-overlay';
+        overlay.style.position = 'fixed';
+        overlay.style.inset = '0';
+        overlay.style.zIndex = '9999';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.background = 'rgba(15,23,42,0.55)';
+        overlay.style.backdropFilter = 'blur(8px)';
+
+        const masked = (() => {
+          if (!userEmail) return 'your email';
+          const [local, domain] = userEmail.split('@');
+          if (!domain) return userEmail;
+          const shownLocal = local.length <= 2 ? local[0] : local.slice(0, 2);
+          return `${shownLocal}***@${domain}`;
+        })();
+
+        // Email is shown only as a hint about which account is being verified.
+        // The 6-digit code itself is NOT displayed in the dialog.
+        overlay.innerHTML = `
+          <div style="background:#fff;border-radius:16px;padding:24px 28px;max-width:380px;width:100%;box-shadow:0 22px 55px rgba(15,23,42,0.45);text-align:center;">
+            <h2 style="margin:0 0 8px;font-size:1.2rem;color:#111827;">Email Verification</h2>
+            <p style="margin:0 0 10px;font-size:0.9rem;color:#4b5563;">For added security, we sent a 6-digit code to <strong>${masked}</strong>.</p>
+            <p style="margin:0 0 16px;font-size:0.85rem;color:#6b7280;">Enter the 6-digit code from your email to continue to the QR Dashboard.</p>
+            <input id="qr-email-code-input" type="text" maxlength="6" inputmode="numeric" autocomplete="one-time-code"
+                   style="font-size:1.4rem;letter-spacing:0.4em;text-align:center;padding:8px 12px;border-radius:999px;border:1px solid #d1d5db;width:100%;box-sizing:border-box;" />
+            <div id="qr-email-error" style="min-height:18px;margin-top:8px;font-size:0.8rem;color:#b91c1c;"></div>
+            <div style="display:flex;gap:8px;justify-content:center;margin-top:16px;">
+              <button id="qr-email-cancel" type="button" class="action-btn" style="background:#e5e7eb;color:#374151;">Cancel</button>
+              <button id="qr-email-submit" type="button" class="action-btn primary">Verify</button>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(overlay);
+        const input = document.getElementById('qr-email-code-input');
+        const errEl = document.getElementById('qr-email-error');
+        const btnSubmit = document.getElementById('qr-email-submit');
+        const btnCancel = document.getElementById('qr-email-cancel');
+
+        function cleanup(ok) {
+          overlay.remove();
+          ok ? resolve() : reject(new Error('Email verification cancelled or invalid'));
+        }
+
+        btnCancel.addEventListener('click', () => cleanup(false));
+
+        async function trySubmit() {
+          const val = String(input.value || '').trim();
+          if (!/^\d{6}$/.test(val)) {
+            errEl.textContent = 'Code must be exactly 6 digits.';
+            return;
+          }
+
+          btnSubmit.disabled = true;
+          btnSubmit.textContent = 'Verifying...';
+          errEl.textContent = '';
+
+          try {
+            await verifyQrVerificationCode({ code: val });
+            cleanup(true);
+          } catch (err) {
+            console.error('Email verification failed:', err);
+            errEl.textContent = 'Incorrect or expired code. Please check your email and try again.';
+          } finally {
+            btnSubmit.disabled = false;
+            btnSubmit.textContent = 'Verify';
+          }
+        }
+
+        btnSubmit.addEventListener('click', trySubmit);
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); trySubmit(); }
+        });
+
+        setTimeout(() => { input.focus(); }, 50);
+      });
+    }
+
+    async function initSecureQrDashboard() {
+      // If user arrived here via a reload or back/forward navigation,
+      // immediately show the logout-only view for security.
+      try {
+        const navEntries = performance.getEntriesByType('navigation');
+        const navType = navEntries && navEntries[0] ? navEntries[0].type : null;
+        if (navType === 'reload' || navType === 'back_forward') {
+          renderLogoutOnlyView();
+          return;
+        }
+      } catch (e) {
+        // If performance API is unavailable, silently ignore and fall back to normal flow.
+      }
+
+      auth.onAuthStateChanged(async (user) => {
+        if (!user) {
+          window.location.href = 'login.html';
+          return;
+        }
+
+        try {
+          const snap = await getDoc(doc(db, 'users', user.uid));
+          const data = snap.exists() ? snap.data() : {};
+          const role = data.role || 'employee';
+
+          if (role !== 'admin') {
+            alert('Only admins can access the QR Dashboard.');
+            window.location.href = 'payroll.html';
+            return;
+          }
+
+          const storedPin = (data.pin ? String(data.pin) : '123456');
+
+          // First factor: PIN
+          try {
+            await showPinOverlay(storedPin);
+          } catch (_) {
+            window.location.href = 'payroll.html';
+            return;
+          }
+
+          // Trigger backend to send a fresh email verification code
+          const loadingOverlay = document.createElement('div');
+          loadingOverlay.style.position = 'fixed';
+          loadingOverlay.style.inset = '0';
+          loadingOverlay.style.zIndex = '9998';
+          loadingOverlay.style.display = 'flex';
+          loadingOverlay.style.alignItems = 'center';
+          loadingOverlay.style.justifyContent = 'center';
+          loadingOverlay.style.background = 'rgba(15,23,42,0.45)';
+          loadingOverlay.style.backdropFilter = 'blur(4px)';
+          loadingOverlay.innerHTML = `
+            <div style="background:#ffffff;border-radius:12px;padding:16px 24px;box-shadow:0 16px 40px rgba(15,23,42,0.4);display:flex;flex-direction:column;align-items:center;gap:8px;min-width:180px;">
+              <div style="width:32px;height:32px;border-radius:999px;border:3px solid #e5e7eb;border-top-color:#2563eb;animation:qr-loading-spin 0.8s linear infinite;"></div>
+              <span style="font-size:0.95rem;color:#111827;font-weight:500;">Loading</span>
+            </div>
+          `;
+
+          if (!document.getElementById('qr-loading-style')) {
+            const style = document.createElement('style');
+            style.id = 'qr-loading-style';
+            style.textContent = `@keyframes qr-loading-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`;
+            document.head.appendChild(style);
+          }
+
+          document.body.appendChild(loadingOverlay);
+
+          try {
+            await sendQrVerificationCode();
+          } catch (err) {
+            console.error('Failed to send QR email verification code:', err);
+            alert('Unable to send verification code email. Please try again later.');
+            window.location.href = 'payroll.html';
+            return;
+          } finally {
+            if (loadingOverlay && loadingOverlay.parentNode) {
+              loadingOverlay.parentNode.removeChild(loadingOverlay);
+            }
+          }
+
+          // Second factor: email verification (code checked via backend)
+          try {
+            await showEmailVerificationOverlay(user.email || '');
+          } catch (_) {
+            window.location.href = 'payroll.html';
+            return;
+          }
+
+          // Both checks passed — initialize QR scanner
+          await waitForHtml5Qrcode(7000);
+          initializeScanner();
+        } catch (err) {
+          console.error('Failed to initialize secure QR dashboard:', err);
+          const statusEl = document.getElementById('status');
+          if (statusEl) {
+            statusEl.textContent = 'Status: Unable to initialize QR dashboard. See console for details.';
+            statusEl.className = 'utility-status error';
+          }
+        }
+      });
+    }
+
+    initSecureQrDashboard();
+  </script>
+</body>
+</html>

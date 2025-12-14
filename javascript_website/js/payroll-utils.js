@@ -3,15 +3,17 @@
 
 // config (editable)
 export const PAYROLL_CONFIG = {
-  // OT premium multiplier (additional on top of base pay already counted in daysWorked)
-  // 1.25 means each OT hour adds 125% of the hourly rate as OT premium.
-  // Since the base pay for those hours is already in daysWorked * ratePerDay,
-  // effective OT compensation per hour is 225% of the normal hourly rate.
+  // OT rate multiplier used by your Excel sheet:
+  // each OT hour is paid at 125% of the hourly rate (1.25x per OT hour).
   otMultiplier: 1.25,
-  // Night differential premium rate (10% of hourly rate for ND hours)
-  ndRate: 0.10,
-  regularHolidayMultiplier: 2.0,
-  specialHolidayMultiplier: 1.3,
+  // Night differential rate used by your Excel sheet:
+  // each ND hour adds 80% of the hourly rate (0.8x per ND hour).
+  ndRate: 0.80,
+  // Regular holiday matches Excel behavior: per_hour * 1.0 * hours.
+  // Example: rate 520 => hourly 65; 65 * 16 hours = 1,040.
+  regularHolidayMultiplier: 1.0,
+  // Special Holiday premium keeps the 0.30x behavior (per_hour * 0.30 * hours).
+  specialHolidayMultiplier: 0.30,
 
   // St. Peter Life Plan (editable): percent of gross (employee only)
   stPeterPercent: 0.00,

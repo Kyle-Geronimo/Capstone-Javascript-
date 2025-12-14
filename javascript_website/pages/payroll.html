@@ -47,9 +47,7 @@
         <button id="calculateBtn" class="action-btn">Calculate</button>
       </div>
 
-      <div class="action-row">
-        <a href="qr-dashboard.html" class="action-btn">QR Dashboard</a>
-      </div>
+      <!-- QR Dashboard entry removed for admin payroll view -->
 
       <div class="group ml-auto">
         <button id="saveRunBtn" class="action-btn primary">Save Payroll Run</button>
@@ -102,6 +100,9 @@
           </tr>
         </thead>
         <tbody id="payrollBody"></tbody>
+        <tfoot>
+          <tr id="payrollGrandTotalRow"></tr>
+        </tfoot>
       </table>
     </div>
 
@@ -110,8 +111,8 @@
       <button id="payrollViewMore" class="action-btn small" type="button">View more</button>
     </div>
 
-    <!-- Attendance Dashboard (QR-based) -->
-    <section class="attendance-dashboard" aria-label="Attendance dashboard">
+    <!-- Attendance Dashboard (QR-based) - removed from admin payroll view -->
+    <section class="attendance-dashboard" aria-label="Attendance dashboard" style="display:none;">
       <header class="attendance-header">
         <div>
           <h3>Attendance Dashboard</h3>
@@ -216,6 +217,73 @@
     import { auth, getUserRole } from '../js/firebase-config.js';
     import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
     import { logout } from '../js/auth.js';
+    import { getDoc, doc } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
+
+    const API_BASE = (window.API_BASE && window.API_BASE.replace(/\/$/, '')) || 'http://localhost:3000';
+
+    // Simple PIN overlay reused from the QR dashboard style
+    function showPinOverlay(correctPin) {
+      return new Promise((resolve, reject) => {
+        const overlay = document.createElement('div');
+        overlay.id = 'payroll-pin-overlay';
+        overlay.style.position = 'fixed';
+        overlay.style.inset = '0';
+        overlay.style.zIndex = '9999';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.background = 'rgba(15,23,42,0.45)';
+        overlay.style.backdropFilter = 'blur(6px)';
+
+        overlay.innerHTML = `
+          <div style="background:#fff;border-radius:16px;padding:24px 28px;max-width:360px;width:100%;box-shadow:0 18px 45px rgba(15,23,42,0.35);text-align:center;">
+            <h2 style="margin:0 0 8px;font-size:1.2rem;color:#111827;">Admin PIN Required</h2>
+            <p style="margin:0 0 16px;font-size:0.9rem;color:#4b5563;">Enter your 6-digit PIN to unlock the payroll dashboard.</p>
+            <input id="payroll-pin-input" type="password" maxlength="6" inputmode="numeric" autocomplete="off"
+                   style="font-size:1.4rem;letter-spacing:0.4em;text-align:center;padding:8px 12px;border-radius:999px;border:1px solid #d1d5db;width:100%;box-sizing:border-box;" />
+            <div id="payroll-pin-error" style="min-height:18px;margin-top:8px;font-size:0.8rem;color:#b91c1c;"></div>
+            <div style="display:flex;gap:8px;justify-content:center;margin-top:16px;">
+              <button id="payroll-pin-cancel" type="button" class="action-btn" style="background:#e5e7eb;color:#374151;">Cancel</button>
+              <button id="payroll-pin-submit" type="button" class="action-btn primary">Unlock</button>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(overlay);
+        const input = document.getElementById('payroll-pin-input');
+        const errEl = document.getElementById('payroll-pin-error');
+        const btnSubmit = document.getElementById('payroll-pin-submit');
+        const btnCancel = document.getElementById('payroll-pin-cancel');
+        const activeCorrectPin = String(correctPin || '');
+
+        function cleanup(ok) {
+          overlay.remove();
+          ok ? resolve() : reject(new Error('PIN cancelled or invalid'));
+        }
+
+        btnCancel.addEventListener('click', () => cleanup(false));
+
+        function trySubmit() {
+          const val = String(input.value || '').trim();
+          if (!/^\d{6}$/.test(val)) {
+            errEl.textContent = 'PIN must be exactly 6 digits.';
+            return;
+          }
+          if (activeCorrectPin && val !== activeCorrectPin) {
+            errEl.textContent = 'Incorrect PIN.';
+            return;
+          }
+          cleanup(true);
+        }
+
+        btnSubmit.addEventListener('click', trySubmit);
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); trySubmit(); }
+        });
+
+        setTimeout(() => { input.focus(); }, 50);
+      });
+    }
 
     // ensure nav visibility helpers run
     updateNavVisibility();
@@ -226,26 +294,50 @@
       highlightActiveNavBtn();
 
       if (!user) {
-        // Not signed in, send to login
         window.location.href = 'login.html';
         return;
       }
 
       const role = await getUserRole(user.uid);
       if (role !== 'admin') {
-        // Block employees from payroll dashboard
         window.location.href = 'profile.html';
         return;
       }
 
-      // if payroll.js re-renders the table after async load, rebind UI hooks
-      // (payroll.js already exposes window.rebindPayrollUI in payroll-ui.js)
-      // call it once page is ready
-      document.addEventListener('DOMContentLoaded', () => {
-        if (typeof window.rebindPayrollUI === 'function') window.rebindPayrollUI();
-        // also call after a short delay to catch async renders
-        setTimeout(() => { if (typeof window.rebindPayrollUI === 'function') window.rebindPayrollUI(); }, 800);
-      });
+      try {
+        const userSnap = await getDoc(doc(window.db || null || {}, 'noop', 'noop')).catch(() => null);
+      } catch (_) {
+        // ignore — db handle may not be globally exposed; we only rely on firebase-config's getUserRole here
+      }
+
+      // Fetch admin Firestore doc directly for stored PIN and email
+      let storedPin = '123456';
+      try {
+        const snap = await getDoc(doc((await import('../js/firebase-config.js')).db, 'users', user.uid));
+        if (snap.exists()) {
+          const data = snap.data() || {};
+          if (data.pin) storedPin = String(data.pin);
+        }
+      } catch (e) {
+        console.warn('Failed to load admin PIN for payroll security gate', e);
+      }
+
+      try {
+        // Require PIN only; no email verification.
+        await showPinOverlay(storedPin);
+
+        // Mark security gate as passed so payroll.js autoInitPayroll can proceed.
+        window.__payrollSecurityOk = true;
+
+        // Rebind UI hooks once the table is rendered by payroll.js
+        document.addEventListener('DOMContentLoaded', () => {
+          if (typeof window.rebindPayrollUI === 'function') window.rebindPayrollUI();
+          setTimeout(() => { if (typeof window.rebindPayrollUI === 'function') window.rebindPayrollUI(); }, 800);
+        });
+      } catch (err) {
+        console.error('Payroll PIN gate failed', err);
+        window.location.href = 'index2.html';
+      }
     });
 
     const logoutBtn = document.getElementById('logout-btn');

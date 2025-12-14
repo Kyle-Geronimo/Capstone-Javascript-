@@ -207,7 +207,7 @@
   <script type="module" src="./js/auth.js"></script>
 
   <script type="module">
-    import { auth } from './js/firebase-config.js';
+    import { auth, getUserRole } from './js/firebase-config.js';
     import { updateNavVisibility, highlightActiveNavBtn } from './js/nav-control.js';
     import { initializeWeatherCards } from './js/weather.js';
     import { logout } from './js/auth.js';
@@ -291,7 +291,10 @@
     // Run the new animation function
     initScrollAnimations();
 
-    auth.onAuthStateChanged((user) => {
+    // Flag to optionally disable the in-app chatbot widget for certain roles
+    let chatDisabledForAdmin = false;
+
+    auth.onAuthStateChanged(async (user) => {
       updateNavVisibility();
       highlightActiveNavBtn();
       updatePublicContentVisibility(user);
@@ -300,6 +303,29 @@
       if (user) {
         const publicNavLinks = document.querySelectorAll('nav .nav-btn.public-only');
         publicNavLinks.forEach(link => link.remove());
+
+        // When the logged-in staff is an admin, swap the floating chat widget
+        // into a static QR button that shows the employee QR image instead
+        try {
+          const role = await getUserRole(user.uid);
+          if (role === 'admin') {
+            chatDisabledForAdmin = true;
+            const chatWidgetPanel = document.getElementById('chat-widget-panel');
+            const chatWidgetToggle = document.getElementById('chat-widget-toggle');
+            if (chatWidgetPanel) {
+              chatWidgetPanel.style.display = 'none';
+            }
+            if (chatWidgetToggle) {
+              const img = chatWidgetToggle.querySelector('img');
+              if (img) {
+                img.src = '/image/bg/emp.png';
+                img.alt = 'Scan employee QR';
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Failed to adjust chat widget for admin role:', err);
+        }
       }
     });
 
@@ -323,6 +349,9 @@
     const chatInput = document.getElementById('chat-input');
 
     const openChatPanel = () => {
+      // For admin accounts on the staff home, the floating widget is repurposed
+      // into a QR button and the chatbot panel must not open.
+      if (typeof chatDisabledForAdmin !== 'undefined' && chatDisabledForAdmin) return;
       if (!chatWidgetPanel) return;
       chatWidgetPanel.classList.add('is-open');
       if (chatInput) chatInput.focus();
@@ -335,6 +364,13 @@
 
     if (chatWidgetToggle) {
       chatWidgetToggle.addEventListener('click', () => {
+        // For admins on the staff home, the floating widget is a QR entry point
+        // into the secure QR dashboard instead of opening the chatbot.
+        if (typeof chatDisabledForAdmin !== 'undefined' && chatDisabledForAdmin) {
+          window.location.href = 'pages/qr-secure.html';
+          return;
+        }
+
         if (chatWidgetPanel?.classList.contains('is-open')) {
           closeChatPanel();
         } else {

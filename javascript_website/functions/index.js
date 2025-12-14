@@ -1,6 +1,7 @@
 import express from 'express';
 import admin from 'firebase-admin';
 import * as functions from 'firebase-functions';
+import nodemailer from 'nodemailer';
 
 admin.initializeApp();
 
@@ -43,6 +44,114 @@ export const deleteUser = functions.https.onRequest(async (req, res) => {
   }
 });
 const db = admin.firestore();
+
+// --- Email transporter for QR verification codes ---
+const qrMailUser = functions.config().qrmail?.user;
+const qrMailPass = functions.config().qrmail?.pass;
+
+const qrTransporter = (qrMailUser && qrMailPass)
+  ? nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: qrMailUser, pass: qrMailPass }
+    })
+  : null;
+
+function generateSixDigitCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+// Callable: sendQrVerificationCode
+export const sendQrVerificationCode = functions.https.onCall(async (data, context) => {
+  const uid = context.auth?.uid;
+  if (!uid) {
+    throw new functions.https.HttpsError('unauthenticated', 'Not signed in');
+  }
+
+  if (!qrTransporter) {
+    throw new functions.https.HttpsError('failed-precondition', 'Email transport not configured');
+  }
+
+  // Ensure caller is admin
+  const userDoc = await db.doc(`users/${uid}`).get();
+  const userData = userDoc.exists ? userDoc.data() : {};
+  if (userData.role !== 'admin') {
+    throw new functions.https.HttpsError('permission-denied', 'Only admins can request verification codes');
+  }
+
+  // Get auth user to read email
+  const userRecord = await admin.auth().getUser(uid);
+  const email = userRecord.email;
+  if (!email) {
+    throw new functions.https.HttpsError('failed-precondition', 'Account has no email');
+  }
+
+  const code = generateSixDigitCode();
+  const expiresAt = admin.firestore.Timestamp.fromDate(
+    new Date(Date.now() + 5 * 60 * 1000)
+  );
+
+  await db.doc(`email_verification_codes/${uid}`).set({
+    uid,
+    email,
+    code,
+    expiresAt,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  const mailOptions = {
+    from: `HotelLink QR Security <${qrMailUser}>`,
+    to: email,
+    subject: 'Your QR Dashboard Verification Code',
+    text: `Your verification code is: ${code}\n\nThis code will expire in 5 minutes.`,
+    html: `
+      <p>Hi,</p>
+      <p>Your verification code for the QR Dashboard is:</p>
+      <p style="font-size:24px;font-weight:700;letter-spacing:0.32em;">${code}</p>
+      <p>This code will expire in 5 minutes.</p>
+      <p>If you did not request this, you can ignore this email.</p>
+    `,
+  };
+
+  await qrTransporter.sendMail(mailOptions);
+  return { ok: true };
+});
+
+// Callable: verifyQrVerificationCode
+export const verifyQrVerificationCode = functions.https.onCall(async (data, context) => {
+  const uid = context.auth?.uid;
+  const code = String(data?.code || '').trim();
+
+  if (!uid) {
+    throw new functions.https.HttpsError('unauthenticated', 'Not signed in');
+  }
+  if (!/^\d{6}$/.test(code)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Code must be 6 digits');
+  }
+
+  const docRef = db.doc(`email_verification_codes/${uid}`);
+  const snap = await docRef.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'No verification code found');
+  }
+
+  const { code: storedCode, expiresAt } = snap.data();
+  if (!storedCode || !expiresAt) {
+    throw new functions.https.HttpsError('failed-precondition', 'Verification record invalid');
+  }
+
+  if (expiresAt.toDate() < new Date()) {
+    await docRef.delete().catch(() => {});
+    throw new functions.https.HttpsError('deadline-exceeded', 'Code expired');
+  }
+
+  if (storedCode !== code) {
+    throw new functions.https.HttpsError('permission-denied', 'Incorrect code');
+  }
+
+  await docRef.delete().catch(() => {});
+  return { ok: true };
+});
+
 const app = express();
 app.use(express.json());
 

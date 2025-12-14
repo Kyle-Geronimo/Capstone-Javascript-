@@ -294,7 +294,6 @@ export async function initializeGenerator() {
 
 export function initializeScanner() {
   // --- Scanner controls & logic (initialize event handlers) ---
-  let currentMode = 'in'; // 'in' or 'out'
   let html5Qrcode = null;
   let currentCameraId = null;
   let scanRequested = false;
@@ -303,14 +302,7 @@ export function initializeScanner() {
   // Key: `${userId}|${yyyy-mm-dd}` -> { hasTimeIn, hasTimeOut }
   const sessionAttendanceState = new Map();
 
-  function setModeVisuals() {
-    const tin = document.getElementById('modeTimeIn');
-    const tout = document.getElementById('modeTimeOut');
-    if (tin) tin.classList.toggle('active', currentMode === 'in');
-    if (tout) tout.classList.toggle('active', currentMode === 'out');
-  }
-  document.getElementById('modeTimeIn')?.addEventListener('click', () => { currentMode = 'in'; setModeVisuals(); });
-  document.getElementById('modeTimeOut')?.addEventListener('click', () => { currentMode = 'out'; setModeVisuals(); });
+  // Scanner now runs in automatic mode (no manual Time In / Time Out buttons).
 
   async function listCamerasToSelect() {
     try {
@@ -447,7 +439,8 @@ export function initializeScanner() {
   }
 
   document.getElementById('uploadQrImage')?.addEventListener('change', async (ev) => {
-    const file = ev.target.files?.[0];
+    const input = ev.target;
+    const file = input.files?.[0];
     if (!file) return;
 
     // Enforce JPG/PNG only
@@ -455,6 +448,8 @@ export function initializeScanner() {
     const lower = name.toLowerCase();
     if (!lower.endsWith('.jpg') && !lower.endsWith('.jpeg') && !lower.endsWith('.png')) {
       addStatus('Only .jpg and .png files are supported for QR image upload.', false);
+      // Clear value so selecting the same invalid file again still triggers change.
+      try { input.value = ''; } catch (_) {}
       return;
     }
 
@@ -513,7 +508,6 @@ export function initializeScanner() {
           decodedText = jsqrResult.data;
         }
       }
-
       if (!decodedText) {
         addStatus('No QR found in image', false);
         return;
@@ -523,6 +517,9 @@ export function initializeScanner() {
     } catch (err) {
       console.error('scanFile err', err);
       addStatus('Failed to scan image', false);
+    } finally {
+      // Reset input so the same file can be selected again without a full page refresh.
+      try { input.value = ''; } catch (_) {}
     }
   });
 
@@ -735,19 +732,6 @@ export function initializeScanner() {
     const lastInDate = userDoc.lastTimeInDate || null;
     const lastOutDate = userDoc.lastTimeOutDate || null;
 
-    const mode = currentMode === 'in' ? 'time-in' : 'time-out';
-
-    if (mode === 'time-in' && lastInDate === dayKey) {
-      addStatus('This account is already time in for today.', false);
-      addDebug(`User ${userDoc.id} blocked by lastTimeInDate=${lastInDate}`);
-      return;
-    }
-    if (mode === 'time-out' && lastOutDate === dayKey) {
-      addStatus('This account is already time out for today.', false);
-      addDebug(`User ${userDoc.id} blocked by lastTimeOutDate=${lastOutDate}`);
-      return;
-    }
-
     // Enforce: at most one time-in and one time-out per user per calendar day
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -758,17 +742,10 @@ export function initializeScanner() {
     //     do not create duplicates even when Firestore checks fail.
     const sessKey = `${userDoc.id}|${dayKey}`;
     const sess = sessionAttendanceState.get(sessKey) || { hasTimeIn: false, hasTimeOut: false };
-    if (mode === 'time-in' && sess.hasTimeIn) {
-      addStatus('This account is already time in for today.', false);
-      addDebug(`Session-blocked duplicate time-in for ${userDoc.id} on ${dayKey}`);
-      return;
-    }
-    if (mode === 'time-out' && sess.hasTimeOut) {
-      addStatus('This account is already time out for today.', false);
-      addDebug(`Session-blocked duplicate time-out for ${userDoc.id} on ${dayKey}`);
-      return;
-    }
 
+    // Best-effort flags from Firestore for today's attendance.
+    let hasTimeIn = false;
+    let hasTimeOut = false;
     try {
       const todayQ = query(
         collection(db, 'attendance'),
@@ -777,32 +754,31 @@ export function initializeScanner() {
         where('rawTime', '<', endIso)
       );
       const todaySnap = await getDocs(todayQ);
-      let hasTimeIn = false;
-      let hasTimeOut = false;
       todaySnap.forEach(d => {
         const m = d.data()?.mode;
         if (m === 'time-in') hasTimeIn = true;
         if (m === 'time-out') hasTimeOut = true;
       });
-
-      if (mode === 'time-in' && hasTimeIn) {
-        addStatus('This account is already time in for today.', false);
-        addDebug(`Blocked duplicate time-in for user ${userDoc.id} on ${startIso}`);
-        // Update session cache to mirror Firestore state
-        sessionAttendanceState.set(sessKey, { hasTimeIn: true, hasTimeOut: sess.hasTimeOut || hasTimeOut });
-        return;
-      }
-      if (mode === 'time-out' && hasTimeOut) {
-        addStatus('This account is already time out for today.', false);
-        addDebug(`Blocked duplicate time-out for user ${userDoc.id} on ${startIso}`);
-        // Update session cache to mirror Firestore state
-        sessionAttendanceState.set(sessKey, { hasTimeIn: sess.hasTimeIn || hasTimeIn, hasTimeOut: true });
-        return;
-      }
     } catch (err) {
       console.error('Attendance check failed', err);
       addDebug('Attendance check failed: ' + (err.message || String(err)));
       // If the check fails, we still proceed with recording to avoid blocking all scans.
+    }
+
+    const alreadyIn = (lastInDate === dayKey) || hasTimeIn || sess.hasTimeIn;
+    const alreadyOut = (lastOutDate === dayKey) || hasTimeOut || sess.hasTimeOut;
+
+    let mode;
+    if (!alreadyIn) {
+      mode = 'time-in';
+    } else if (!alreadyOut) {
+      mode = 'time-out';
+    } else {
+      addStatus('This account is already time in and time out for today.', false);
+      addDebug(`Blocked extra scan for user ${userDoc.id} on ${startIso}`);
+      // Mirror Firestore state into session cache
+      sessionAttendanceState.set(sessKey, { hasTimeIn: true, hasTimeOut: true });
+      return;
     }
 
     const record = {

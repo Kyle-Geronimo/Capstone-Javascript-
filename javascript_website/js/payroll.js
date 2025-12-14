@@ -598,10 +598,36 @@ function hidePayrollLoading() {
   payrollLoadingOverlay.classList.add('hidden');
 }
 
-// Auto-initialize payroll on page load or when auth is ready
+// Wait until the payroll security gate (PIN + email verification) has completed.
+// The payroll page sets window.__payrollSecurityOk = true only after the admin
+// has successfully passed the extra verification step.
+async function waitForPayrollSecurityGate() {
+  try {
+    if (typeof window === 'undefined') return;
+    if (window.__payrollSecurityOk) return;
+
+    await new Promise((resolve) => {
+      const start = Date.now();
+      const timeoutMs = 5 * 60 * 1000; // safety upper bound: 5 minutes
+      const iv = setInterval(() => {
+        if (window.__payrollSecurityOk || (Date.now() - start) > timeoutMs) {
+          clearInterval(iv);
+          resolve();
+        }
+      }, 200);
+    });
+  } catch (_) {
+    // non-fatal: if anything goes wrong, fall through and allow payroll init
+  }
+}
+
+// Auto-initialize payroll on page load or when auth is ready, but only
+// after the payroll security gate has been satisfied.
 (async function autoInitPayroll() {
   try {
     if (window.__payrollInitialized) return;
+
+    await waitForPayrollSecurityGate();
 
     // If we have Firebase auth available, only auto-init when already signed-in.
     if (typeof auth !== 'undefined' && auth && typeof auth.currentUser !== 'undefined') {
@@ -1480,7 +1506,6 @@ function formatDateForInput(v) {
   // Fallback when type is not recognized
   return '';
 }
-
 function getFilteredPayrollRows() {
   if (!Array.isArray(rows)) return [];
   const term = (payrollSearchInput && payrollSearchInput.value || '').trim().toLowerCase();
@@ -1585,6 +1610,131 @@ function renderTable() {
     `;
     payrollBody.appendChild(tr);
   });
+
+  // Compute grand totals over the currently filtered rows (ignores pagination
+  // but respects search/filter), to mirror the Excel "Grand Total" row.
+  const totals = {
+    days: 0,
+    basicTotal: 0,
+    hoursWorked: 0,
+    ndHours: 0,
+    ndOtHours: 0,
+    otHours: 0,
+    regHolidayHours: 0,
+    specialHolidayHours: 0,
+    sss: 0,
+    philhealth: 0,
+    pagibig: 0,
+    stPeter: 0,
+    sssSalaryLoan: 0,
+    sssCalamityLoan: 0,
+    hdmfSalaryLoan: 0,
+    hdmfCalamityLoan: 0,
+    cashAdvance: 0,
+    credit: 0,
+    utLateHours: 0,
+    utLateAmount: 0,
+    gross: 0,
+    deductionsTotal: 0,
+    net: 0
+  };
+
+  const addNum = (v) => {
+    const n = Number(v || 0);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  filteredRows.forEach(r => {
+    const auto = r._calc || {};
+    const breakdown = (auto.deductions && auto.deductions.breakdown) ? auto.deductions.breakdown : {};
+
+    totals.days += addNum(r.daysWorked ?? auto.daysWorked);
+    // Basic total is stored on the row; fall back to rate * days when missing
+    const rp = addNum(r.ratePerDay || auto.ratePerDay);
+    const d  = addNum(r.daysWorked || auto.daysWorked);
+    const basic = (r.basicTotal !== null && r.basicTotal !== undefined) ? addNum(r.basicTotal) : (rp * d);
+    totals.basicTotal += basic;
+
+    totals.hoursWorked       += addNum(r.hoursWorked       ?? auto.hoursWorked);
+    totals.ndHours           += addNum(r.ndHours           ?? auto.ndHours);
+    totals.ndOtHours         += addNum(r.ndOtHours         ?? auto.ndOtHours);
+    totals.otHours           += addNum(r.otHours           ?? auto.otHours);
+    totals.regHolidayHours   += addNum(r.regularHolidayHours ?? auto.regHolidayHours);
+    totals.specialHolidayHours += addNum(r.specialHolidayHours ?? auto.specialHolidayHours);
+
+    // For statutory and manual deductions, prefer manual overrides when present.
+    const autoSss     = breakdown.sss_employee ?? breakdown.sss ?? 0;
+    const autoPhil    = breakdown.phil_employee ?? breakdown.philhealth_employee ?? 0;
+    const autoPagibig = breakdown.pagibig_employee ?? 0;
+    const autoStPeter = breakdown['st.peter'] ?? breakdown.st_peter ?? 0;
+
+    totals.sss             += addNum(r.sss !== null && r.sss !== undefined ? r.sss : autoSss);
+    totals.philhealth      += addNum(r.philhealth !== null && r.philhealth !== undefined ? r.philhealth : autoPhil);
+    totals.pagibig         += addNum(r.pagibig !== null && r.pagibig !== undefined ? r.pagibig : autoPagibig);
+    totals.stPeter         += addNum(r.stPeter !== null && r.stPeter !== undefined ? r.stPeter : autoStPeter);
+
+    totals.sssSalaryLoan   += addNum(r.sssSalaryLoan);
+    totals.sssCalamityLoan += addNum(r.sssCalamityLoan);
+    totals.hdmfSalaryLoan  += addNum(r.hdmfSalaryLoan);
+    totals.hdmfCalamityLoan += addNum(r.hdmfCalamityLoan);
+    totals.cashAdvance     += addNum(r.cashAdvance);
+    totals.credit          += addNum(r.credit);
+
+    totals.utLateHours     += addNum(r.utLateHours ?? auto.utLateHours);
+    totals.utLateAmount    += addNum(r.utLateAmount ?? auto.utLateAmount);
+
+    const grossVal = (r._manualGross !== null && r._manualGross !== undefined)
+      ? addNum(r._manualGross)
+      : addNum(auto.gross);
+    const netVal = (r._manualNet !== null && r._manualNet !== undefined)
+      ? addNum(r._manualNet)
+      : addNum(auto.net);
+    const dedTotal = (r._manualDeductions !== null && r._manualDeductions !== undefined)
+      ? addNum(r._manualDeductions)
+      : addNum(auto.deductions && auto.deductions.total);
+
+    totals.gross          += grossVal;
+    totals.deductionsTotal += dedTotal;
+    totals.net            += netVal;
+  });
+
+  const fmtTotal = (v) => {
+    const n = Number(v || 0);
+    return Number.isFinite(n) ? n.toFixed(2) : '';
+  };
+
+  const grandRow = document.getElementById('payrollGrandTotalRow');
+  if (grandRow) {
+    grandRow.innerHTML = `
+      <td></td>
+      <td class="username"><strong>Grand Total</strong></td>
+      <td></td>
+      <td>${fmtTotal(totals.days)}</td>
+      <td>${fmtTotal(totals.basicTotal)}</td>
+      <td>${fmtTotal(totals.hoursWorked)}</td>
+      <td>${fmtTotal(totals.ndHours)}</td>
+      <td>${fmtTotal(totals.ndOtHours)}</td>
+      <td>${fmtTotal(totals.otHours)}</td>
+      <td>${fmtTotal(totals.regHolidayHours)}</td>
+      <td>${fmtTotal(totals.specialHolidayHours)}</td>
+      <td>${fmtTotal(totals.sss)}</td>
+      <td>${fmtTotal(totals.philhealth)}</td>
+      <td>${fmtTotal(totals.pagibig)}</td>
+      <td>${fmtTotal(totals.stPeter)}</td>
+      <td>${fmtTotal(totals.sssSalaryLoan)}</td>
+      <td>${fmtTotal(totals.sssCalamityLoan)}</td>
+      <td>${fmtTotal(totals.hdmfSalaryLoan)}</td>
+      <td>${fmtTotal(totals.hdmfCalamityLoan)}</td>
+      <td>${fmtTotal(totals.cashAdvance)}</td>
+      <td>${fmtTotal(totals.credit)}</td>
+      <td>${fmtTotal(totals.utLateHours)}</td>
+      <td>${fmtTotal(totals.utLateAmount)}</td>
+      <td>${fmtTotal(totals.gross)}</td>
+      <td>${fmtTotal(totals.deductionsTotal)}</td>
+      <td>${fmtTotal(totals.net)}</td>
+      <td></td>
+    `;
+  }
 
   // wire inputs to model
   payrollBody.querySelectorAll('input').forEach(inp => {

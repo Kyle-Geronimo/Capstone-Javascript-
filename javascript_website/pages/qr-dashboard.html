@@ -28,61 +28,12 @@
 
       <div class="admin-section">
 
-        <div style="margin-top: 1.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
-          <!-- LEFT PANEL: GENERATOR -->
-          <div>
-            <h4 style="color: #1f4ea6; margin-top: 0; margin-bottom: 1rem;">Employee QR Generator</h4>
-            <form id="createForm" class="qr-generator-form">
-              <div class="form-row" style="margin-bottom: 1rem;">
-                <label for="employeeSelect">Employee</label>
-                <select id="employeeSelect" aria-label="Select employee">
-                  <option value="">— select employee —</option>
-                </select>
-
-                <label for="roleField">Role</label>
-                <input id="roleField" readonly placeholder="Auto-filled from users DB" aria-readonly="true" />
-
-                <label for="department">Department</label>
-                <select id="department" class="form-control" id="departmentSelect">
-                  <option value="">— choose department —</option>
-                  <option value="Bicotels Hotel">Bicotels Hotel</option>
-                  <option value="D'Mariners Inn Hotel">D'Mariners Inn Hotel</option>
-                  <option value="Wennrod Hotel">Wennrod Hotel</option>
-                </select>
-
-                <label for="shiftSelect">Shift</label>
-                <select id="shiftSelect" class="form-control" aria-label="Select shift">
-                  <option value="">— choose shift —</option>
-                  <option value="morning">Morning Shift (06:00 - 13:59)</option>
-                  <option value="mid">Mid Shift (14:00 - 21:59)</option>
-                  <option value="night">Night Shift (22:00 - 05:59)</option>
-                </select>
-              </div>
-
-              <button type="submit" class="action-btn primary">Generate QR</button>
-            </form>
-
-            <div id="resultArea" style="display:none; margin-top: 2rem; padding: 1.5rem; background: #f8f9fd; border-radius: 8px; border: 1px solid #e8ecf5;">
-              <h3 style="color: #1f4ea6; margin-top: 0;">Employee created</h3>
-              <div class="generator-result-info" id="info" style="margin-bottom: 1.5rem;"></div>
-              <div class="generator-qr-preview" id="qrPreview" style="text-align: center; margin: 1.5rem 0;"></div>
-              <div class="generator-result-buttons" style="display: flex; gap: 1rem; justify-content: center; margin-top: 1.5rem;">
-                <button id="downloadBtn" class="action-btn">Download PNG</button>
-                <button id="printBtn" class="action-btn">Print</button>
-              </div>
-            </div>
-
-            <div id="status" style="margin-top: 1.5rem;"></div>
-          </div>
-
-          <!-- RIGHT PANEL: SCANNER -->
-          <div>
-            <h4 style="color: #1f4ea6; margin-top: 0; margin-bottom: 1rem;">QR Code Scanner</h4>
-
+        <!-- QR Code Scanner (scanner functionality remains here) -->
+        <div style="margin-top: 1.5rem;">
+          <h4 style="color: #1f4ea6; margin-top: 0; margin-bottom: 1rem;">QR Code Scanner</h4>
             <div class="scanner-controls">
               <div style="display:flex; gap:8px; align-items:center;">
-                <button id="modeTimeIn" class="mode-btn">Time In</button>
-                <button id="modeTimeOut" class="mode-btn">Time Out</button>
+                <span style="font-size:0.9rem;color:#4b5563;font-weight:500;">Mode: Automatic Time In / Time Out</span>
                 <select id="cameraSelect" style="margin-left:8px;"></select>
               </div>
 
@@ -136,7 +87,7 @@
 <script type="module">
   import { auth, db } from '../js/firebase-config.js';
   import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
-  import { initializeGenerator, initializeScanner } from '../js/qr.js';
+  import { initializeScanner } from '../js/qr.js';
   import { getDoc, doc, updateDoc } from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
 
 
@@ -250,8 +201,7 @@
         return;
       }
 
-      // PIN OK — proceed to initialize QR generator & scanner
-      initializeGenerator();
+      // PIN OK — proceed to initialize QR scanner
       await waitForHtml5Qrcode(7000);
       console.log('Html5Qrcode available — initializing scanner.');
       initializeScanner();

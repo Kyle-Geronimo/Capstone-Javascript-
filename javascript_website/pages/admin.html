@@ -16,6 +16,7 @@
   <script type="module" src="../js/firebase-config.js"></script>
   <script type="module" src="../js/auth.js"></script>
   <script type="module" src="../js/admin.js"></script>
+  <script type="module" src="../js/qr.js"></script>
 </head>
 <body>
   <header>
@@ -47,16 +48,66 @@
         </div>
       </div>
 
-      <!-- User Management Section -->
-      <!-- Payroll View Requests panel (admins) -->
-      <div id="payroll-requests-wrapper" style="display:flex;flex-direction:column;gap:8px; margin-top:12px;">
-        <!-- Inline banner to show actions taken on payroll requests -->
-        <div id="adminPayrollNotice" class="payroll-status" style="display:none;"></div>
-        <div id="payroll-requests-panel" class="requests-panel profile-card" style="width:360px;min-width:280px;max-height:78vh;overflow:auto;padding:12px;border-radius:8px;">
-          <h3 style="margin:0 0 8px 0;">Payroll View Requests</h3>
-          <div id="payrollRequestsList">Loading payroll view requests...</div>
+      <!-- Row: [Generate QR] [Request Payroll] -->
+      <div class="admin-section" style="display:flex; gap:1.5rem; align-items:flex-start; flex-wrap:wrap;">
+        <!-- Employee QR Generator (left column) -->
+        <div style="flex:1 1 360px; min-width:0;">
+          <h3>Generate QR</h3>
+          <form id="createForm" class="qr-generator-form">
+            <div class="form-row" style="margin-bottom: 1rem;">
+              <label for="employeeSelect">Employee</label>
+              <select id="employeeSelect" aria-label="Select employee">
+                <option value="">— select employee —</option>
+              </select>
+
+              <label for="roleField">Role</label>
+              <input id="roleField" readonly placeholder="Auto-filled from users DB" aria-readonly="true" />
+
+              <label for="department">Department</label>
+              <select id="department" class="form-control" id="departmentSelect">
+                <option value="">— choose department —</option>
+                <option value="Bicotels Hotel">Bicotels Hotel</option>
+                <option value="D'Mariners Inn Hotel">D'Mariners Inn Hotel</option>
+                <option value="Wennrod Hotel">Wennrod Hotel</option>
+              </select>
+
+              <label for="shiftSelect">Shift</label>
+              <select id="shiftSelect" class="form-control" aria-label="Select shift">
+                <option value="">— choose shift —</option>
+                <option value="morning">Morning Shift (06:00 - 13:59)</option>
+                <option value="mid">Mid Shift (14:00 - 21:59)</option>
+                <option value="night">Night Shift (22:00 - 05:59)</option>
+              </select>
+            </div>
+
+            <button type="submit" class="action-btn primary">Generate QR</button>
+          </form>
+
+          <div id="resultArea" style="display:none; margin-top: 2rem; padding: 1.5rem; background: #f8f9fd; border-radius: 8px; border: 1px solid #e8ecf5;">
+            <h3 style="color: #1f4ea6; margin-top: 0;">Employee created</h3>
+            <div class="generator-result-info" id="info" style="margin-bottom: 1.5rem;"></div>
+            <div class="generator-qr-preview" id="qrPreview" style="text-align: center; margin: 1.5rem 0;"></div>
+            <div class="generator-result-buttons" style="display: flex; gap: 1rem; justify-content: center; margin-top: 1.5rem;">
+              <button id="downloadBtn" class="action-btn">Download PNG</button>
+              <button id="printBtn" class="action-btn">Print</button>
+            </div>
+          </div>
+
+          <div id="status" style="margin-top: 1.5rem;"></div>
+        </div>
+
+        <!-- Payroll View Requests panel (right column) -->
+        <div id="payroll-requests-wrapper" style="flex:1 1 320px; min-width:0; display:flex; flex-direction:column; gap:8px; margin-top:0;">
+          <!-- Inline banner to show actions taken on payroll requests -->
+          <div id="adminPayrollNotice" class="payroll-status" style="display:none;"></div>
+          <div id="payroll-requests-panel" class="requests-panel profile-card" style="width:100%;min-width:0;max-height:78vh;overflow:auto;padding:12px;border-radius:8px;">
+            <h3 style="margin:0 0 8px 0;">Request Payroll</h3>
+            <div id="payrollRequestsList">Loading payroll view requests...</div>
+          </div>
         </div>
       </div>
+
+      <!-- User Management Section -->
       <div class="admin-section">
         <div class="section-header">
           <h3>User Management</h3>
@@ -82,6 +133,7 @@
     import { auth, getUserRole } from '../js/firebase-config.js';
     import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
     import { watchRequestsRealtime, loadAccounts } from '../js/admin.js';
+    import { initializeGenerator } from '../js/qr.js';
     import { logout } from '../js/auth.js';
 
     updateNavVisibility();
@@ -105,9 +157,10 @@
         return;
       }
 
-      // Admins: start realtime watchers
+      // Admins: start realtime watchers and enable QR generator
       watchRequestsRealtime(); 
       loadAccounts(); 
+      initializeGenerator();
     });
     
     const logoutBtn = document.getElementById('logout-btn');

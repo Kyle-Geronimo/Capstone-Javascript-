@@ -9,7 +9,7 @@ const fs = require('fs');
 const cors = require('cors');
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.CPORT || 4000;
 
 // --- Configuration Check ---
 const requiredEnv = ['GEMINI_API_KEY', 'PAGE_ACCESS_TOKEN', 'VERIFY_TOKEN', 'GOOGLE_APPLICATION_CREDENTIALS', 'FIREBASE_PROJECT_ID'];
