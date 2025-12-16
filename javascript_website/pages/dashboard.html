@@ -33,6 +33,130 @@
     </div>
   </footer>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+  <script>
+    (function () {
+      function exportGuestTableToPdf() {
+        var tbody = document.querySelector('.guest-table tbody');
+        if (!tbody) {
+          alert('Guest table not found on the page.');
+          return;
+        }
+
+        var rows = Array.from(tbody.querySelectorAll('tr'));
+        if (!rows.length || rows[0].querySelector('.no-data')) {
+          alert('No guest records to export.');
+          return;
+        }
+
+        var jspdfModule = window.jspdf || null;
+        var jsPDF = jspdfModule && jspdfModule.jsPDF ? jspdfModule.jsPDF : (window.jsPDF || null);
+        if (!jsPDF) {
+          alert('PDF library (jsPDF) is not loaded. Please check your network connection.');
+          return;
+        }
+
+        var doc = new jsPDF('p', 'pt', 'a4');
+
+        var head = [[
+          'Guest Name',
+          'Hotel',
+          'Room',
+          'Check-in',
+          'Check-out',
+          'Status'
+        ]];
+
+        var body = [];
+        rows.forEach(function (tr) {
+          var cells = tr.querySelectorAll('td');
+          if (!cells || cells.length < 6) return;
+          if (tr.querySelector('.no-data')) return;
+
+          body.push([
+            (cells[0].textContent || '').trim(),
+            (cells[1].textContent || '').trim(),
+            (cells[2].textContent || '').trim(),
+            (cells[3].textContent || '').trim(),
+            (cells[4].textContent || '').trim(),
+            (cells[5].textContent || '').trim()
+          ]);
+        });
+
+        if (!body.length) {
+          alert('No guest records to export.');
+          return;
+        }
+
+        var tableOpts = {
+          head: head,
+          body: body,
+          startY: 60,
+          styles: { fontSize: 9 },
+          headStyles: { fillColor: [15, 23, 42] }
+        };
+
+        doc.setFontSize(14);
+        doc.text('Guest List', 40, 30);
+
+        if (typeof doc.autoTable === 'function') {
+          doc.autoTable(tableOpts);
+        } else if (typeof window.jspdfAutoTable === 'function') {
+          window.jspdfAutoTable(doc, tableOpts);
+        } else {
+          var y = 50;
+          body.forEach(function (row, idx) {
+            if (y > 780) {
+              doc.addPage();
+              y = 40;
+            }
+            doc.text(String(idx + 1) + '. ' + row.join(' | '), 40, y);
+            y += 14;
+          });
+        }
+
+        doc.save('guest_list.pdf');
+      }
+
+      function ensureExportButton() {
+        var filters = document.querySelector('.guest-card-header .guest-filters');
+        if (!filters) return false;
+        if (document.getElementById('guestStaticExportPdfBtn')) return true;
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = 'guestStaticExportPdfBtn';
+        btn.className = 'action-btn secondary';
+        btn.textContent = 'Export Guest List (PDF)';
+        btn.addEventListener('click', exportGuestTableToPdf);
+
+        filters.insertBefore(btn, filters.firstChild || null);
+        return true;
+      }
+
+      function initStaticGuestExport() {
+        ensureExportButton();
+
+        var attempts = 0;
+        var maxAttempts = 30;
+        var intervalId = setInterval(function () {
+          if (ensureExportButton() || attempts >= maxAttempts) {
+            clearInterval(intervalId);
+          }
+          attempts++;
+        }, 500);
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initStaticGuestExport);
+      } else {
+        initStaticGuestExport();
+      }
+    })();
+  </script>
+
   <script type="module">
     import { auth } from '../js/firebase-config.js';
     import { updateNavVisibility, highlightActiveNavBtn } from '../js/nav-control.js';
