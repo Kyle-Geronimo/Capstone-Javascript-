@@ -1,0 +1,814 @@
+/* ============================================
+   HotelLink Redesign v5 - CENTERING FIX
+   - Forces all content to center
+   - Targets .container class specifically
+   - Ensures hotel cards and room cards center
+   ============================================ */
+
+/* === COLOR PALETTE === */
+:root {
+  --brand-blue: #4f8cff;
+  --brand-blue-light: #6ed6ff;
+  --brand-blue-dark: #1f4ea6;
+  --brand-navy: #0f1724;
+  --brand-navy-light: #102a54;
+  
+  --luxury-cream: #faf8f5;
+  --luxury-warm-white: #fffef9;
+  --luxury-soft-gray: #f5f3f0;
+  --luxury-muted-text: #64748b;
+  --luxury-charcoal: #2c2c2c;
+  --luxury-border: rgba(79, 140, 255, 0.12);
+  
+  --font-display: 'Playfair Display', 'Times New Roman', Georgia, serif;
+  --font-cursive: 'Great Vibes', cursive;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  
+  --section-padding: clamp(4rem, 8vw, 7rem);
+  --container-max: 1100px;
+  
+  --transition-smooth: 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* === GLOBAL === */
+body {
+  background: var(--luxury-warm-white);
+  color: var(--luxury-charcoal);
+  font-family: var(--font-body);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* ============================================
+   CONTAINER - THE KEY TO CENTERING
+   ============================================ */
+.container {
+  width: 100% !important;
+  max-width: var(--container-max) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: 20px !important;
+  padding-right: 20px !important;
+  box-sizing: border-box !important;
+}
+
+/* Main content area */
+main {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* All sections should be full width but center their content */
+main > section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ============================================
+   HEADER
+   ============================================ */
+header {
+  background: linear-gradient(90deg, var(--brand-blue) 0%, var(--brand-blue-light) 100%) !important;
+  padding: 0 !important;
+  box-shadow: 0 4px 20px rgba(79, 140, 255, 0.15);
+  width: 100%;
+}
+
+header .container {
+  padding-top: 1rem !important;
+  padding-bottom: 1rem !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+}
+
+header h1 {
+  font-family: var(--font-body);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 1rem;
+}
+
+.nav-btn {
+  background: #fff !important;
+  color: var(--brand-blue) !important;
+  border: none !important;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 0.5rem 1rem !important;
+  border-radius: 999px !important;
+  box-shadow: 0 2px 8px rgba(79,140,255,0.1) !important;
+  transition: var(--transition-smooth) !important;
+}
+
+.nav-btn:hover,
+.nav-btn:focus-visible,
+.nav-btn.active {
+  background: var(--brand-blue) !important;
+  color: #fff !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 14px rgba(31,78,166,0.28) !important;
+}
+
+/* Remove pseudo-element artifacts */
+.nav-btn::after,
+.nav-btn::before,
+button::after,
+button::before {
+  content: none !important;
+}
+
+/* ============================================
+   HERO SECTION
+   ============================================ */
+.home-hero {
+  position: relative;
+  min-height: 70vh;
+  padding: var(--section-padding) 0 !important;
+  background: linear-gradient(180deg, rgba(79,140,255,0.04), rgba(110,214,255,0.02)) !important;
+  border: none !important;
+  width: 100% !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+
+.home-hero .container,
+.home-hero .hero-inner {
+  width: 100% !important;
+  max-width: var(--container-max) !important;
+  margin: 0 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center !important;
+}
+
+/* Override any grid layout on hero-inner */
+.home-hero .hero-inner {
+  grid-template-columns: none !important;
+  gap: 0 !important;
+}
+
+.home-hero .hero-copy {
+  width: 100% !important;
+  max-width: 800px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center !important;
+}
+
+.home-hero .hero-copy h2 {
+  font-family: var(--font-cursive) !important;
+  font-size: clamp(2.5rem, 6vw, 4rem) !important;
+  font-weight: 400 !important;
+  line-height: 1.2 !important;
+  color: var(--brand-navy-light) !important;
+  margin: 0 0 1.5rem 0 !important;
+  text-align: center !important;
+  width: 100% !important;
+}
+
+.home-hero .hero-copy .lead {
+  font-family: var(--font-body);
+  font-size: clamp(1rem, 1.5vw, 1.15rem);
+  color: var(--luxury-muted-text) !important;
+  max-width: 600px !important;
+  margin: 0 auto 2rem auto !important;
+  line-height: 1.8;
+  text-align: center !important;
+}
+
+.home-hero .hero-panel {
+  display: none !important;
+}
+
+/* ============================================
+   ABOUT / FEATURES SECTION
+   ============================================ */
+.home-features {
+  padding: var(--section-padding) 0 !important;
+  background: var(--luxury-warm-white);
+  width: 100% !important;
+}
+
+.home-features > .container {
+  width: 100% !important;
+  max-width: var(--container-max) !important;
+  margin: 0 auto !important;
+}
+
+.home-features .section-title {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--brand-blue);
+  margin-bottom: 0.5rem !important;
+  font-weight: 600;
+  text-align: center;
+}
+
+.about-typed-wrap {
+  margin: 0 0 4rem 0 !important;
+  text-align: center;
+  width: 100%;
+}
+
+.about-typed-lead {
+  font-family: var(--font-body);
+  font-size: 0.85rem !important;
+  letter-spacing: 0.15em !important;
+  text-transform: uppercase;
+  color: var(--luxury-muted-text) !important;
+  margin-bottom: 0.75rem !important;
+}
+
+.about-typed-line {
+  font-family: var(--font-display) !important;
+  font-size: clamp(2rem, 4vw, 3rem) !important;
+  color: var(--brand-navy-light) !important;
+  font-weight: 400;
+  font-style: italic;
+}
+
+.typed-cursor {
+  color: var(--brand-blue);
+}
+
+.about-typed-wrap::after {
+  content: '';
+  display: block;
+  width: 60px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--brand-blue), var(--brand-blue-light));
+  margin: 3rem auto 0;
+  border-radius: 2px;
+}
+
+/* ============================================
+   HOTEL GALLERY CARDS - CENTERED
+   ============================================ */
+.hotel-gallery-card,
+.card.hotel-gallery-card {
+  background: var(--luxury-cream) !important;
+  border: none !important;
+  border-radius: 16px !important;
+  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.08) !important;
+  padding: 0 !important;
+  margin: 2rem auto !important;
+  overflow: hidden;
+  width: 100% !important;
+  max-width: var(--container-max) !important;
+  
+  /* Ensure visibility */
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: none !important;
+}
+
+/* Hero banner inside card */
+.hotel-gallery-hero {
+  position: relative;
+  min-height: 300px !important;
+  border-radius: 16px 16px 0 0 !important;
+  display: flex;
+  align-items: flex-end;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.hotel-gallery-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg, 
+    transparent 0%, 
+    rgba(15, 23, 42, 0.75) 100%
+  ) !important;
+  border-radius: 16px 16px 0 0;
+}
+
+.hotel-gallery-hero-inner {
+  position: relative;
+  z-index: 1;
+  padding: 2rem !important;
+  width: 100%;
+}
+
+.hotel-gallery-hero-inner h4 {
+  font-family: var(--font-display) !important;
+  font-size: clamp(1.5rem, 3vw, 2rem) !important;
+  font-weight: 500 !important;
+  color: #fff !important;
+  margin-bottom: 0.5rem;
+}
+
+.hotel-gallery-hero-inner p,
+.hotel-gallery-hero-inner .muted {
+  font-size: 1rem !important;
+  color: rgba(255,255,255,0.85) !important;
+  max-width: 500px;
+}
+
+/* Gallery thumbnails */
+.dmariners-album,
+.wennrod-album,
+.bicotels-album,
+.hotel-gallery-thumbs {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 8px !important;
+  padding: 8px !important;
+  margin: 0 !important;
+  background: #fff;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.dmariners-album img,
+.wennrod-album img,
+.bicotels-album img,
+.hotel-gallery-thumbs img {
+  width: 100% !important;
+  aspect-ratio: 1/1 !important;
+  object-fit: cover !important;
+  border-radius: 8px !important;
+  transition: var(--transition-smooth) !important;
+  animation: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.dmariners-album a:hover img,
+.wennrod-album a:hover img,
+.bicotels-album a:hover img,
+.hotel-gallery-thumbs a:hover img {
+  transform: scale(1.05) !important;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.2) !important;
+}
+
+/* Remove +2 overlay */
+.dmariners-album a:nth-child(4)::after,
+.wennrod-album a:nth-child(4)::after,
+.bicotels-album a:nth-child(4)::after {
+  display: none !important;
+}
+
+.dmariners-album a:nth-child(n+5),
+.wennrod-album a:nth-child(n+5),
+.bicotels-album a:nth-child(n+5) {
+  display: block !important;
+}
+
+/* Hotel details section inside card */
+.hotel-gallery-card > div:last-child {
+  padding: 2rem !important;
+  background: var(--luxury-warm-white);
+}
+
+.hotel-gallery-card h4 {
+  font-family: var(--font-body) !important;
+  font-size: 0.85rem !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  color: var(--brand-blue) !important;
+  font-weight: 600 !important;
+  margin-bottom: 1rem !important;
+}
+
+.hotel-gallery-card ul {
+  columns: 2;
+  column-gap: 2rem;
+  margin-bottom: 1.5rem !important;
+}
+
+.hotel-gallery-card ul li {
+  color: var(--luxury-muted-text);
+  font-size: 0.95rem;
+  line-height: 1.8;
+  break-inside: avoid;
+}
+
+.hotel-gallery-card > div:last-child > p {
+  font-family: var(--font-display);
+  font-size: 1.05rem !important;
+  font-style: italic;
+  color: var(--luxury-charcoal);
+  line-height: 1.8;
+  max-width: 700px;
+}
+
+/* ============================================
+   ROOM CARDS (Family Suite, etc.) - CENTERED
+   These appear to be dynamically loaded
+   ============================================ */
+
+/* Target any room-related containers */
+[class*="room"],
+[class*="Room"],
+.rooms-container,
+.room-cards,
+.rooms-grid {
+  width: 100% !important;
+  max-width: var(--container-max) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: 20px !important;
+  padding-right: 20px !important;
+  box-sizing: border-box !important;
+}
+
+/* Room cards grid - if they're in a grid */
+.room-cards,
+.rooms-grid,
+[class*="rooms-"] {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)) !important;
+  gap: 1.5rem !important;
+  justify-content: center !important;
+}
+
+/* Individual room cards */
+.room-card,
+[class*="room-card"] {
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+  transition: var(--transition-smooth);
+}
+
+.room-card:hover,
+[class*="room-card"]:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 15px 40px rgba(79, 140, 255, 0.15);
+}
+
+/* ============================================
+   BUTTONS - ANIMATED & CENTERED
+   ============================================ */
+.link-btn,
+.action-btn.primary,
+.see-more-btn,
+button[class*="detail"],
+button[class*="Detail"] {
+  background: linear-gradient(135deg, var(--brand-blue) 0%, var(--brand-blue-light) 100%) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 12px !important;
+  padding: 0.9rem 2rem !important;
+  font-family: var(--font-body) !important;
+  font-size: 0.9rem !important;
+  letter-spacing: 0.05em !important;
+  font-weight: 600 !important;
+  box-shadow: 0 8px 25px rgba(79, 140, 255, 0.25) !important;
+  position: relative;
+  overflow: hidden;
+  transition: var(--transition-smooth) !important;
+  cursor: pointer;
+  display: inline-block !important;
+  margin: 1rem auto !important;
+}
+
+/* Center button container */
+.button-container,
+[class*="btn-wrap"],
+[class*="button-wrap"] {
+  width: 100%;
+  display: flex !important;
+  justify-content: center !important;
+  margin: 1.5rem 0;
+}
+
+/* Shimmer effect */
+.link-btn::before,
+.action-btn.primary::before,
+.see-more-btn::before {
+  content: '' !important;
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255,255,255,0.3),
+    transparent
+  );
+  transition: left 0.6s ease;
+}
+
+/* NO ::after content */
+.link-btn::after,
+.action-btn.primary::after,
+.see-more-btn::after,
+button::after {
+  content: none !important;
+  display: none !important;
+}
+
+.link-btn:hover,
+.action-btn.primary:hover,
+.see-more-btn:hover {
+  transform: translateY(-3px) scale(1.02) !important;
+  box-shadow: 0 15px 40px rgba(79, 140, 255, 0.35) !important;
+}
+
+.link-btn:hover::before,
+.action-btn.primary:hover::before,
+.see-more-btn:hover::before {
+  left: 100%;
+}
+
+/* Pulse animation */
+@keyframes button-pulse {
+  0%, 100% { box-shadow: 0 8px 25px rgba(79, 140, 255, 0.25); }
+  50% { box-shadow: 0 8px 35px rgba(79, 140, 255, 0.45); }
+}
+
+.link-btn,
+.see-more-btn {
+  animation: button-pulse 3s ease-in-out infinite;
+}
+
+.link-btn:hover,
+.see-more-btn:hover {
+  animation: none;
+}
+
+/* ============================================
+   QUICKLINKS / CONTACTS - CENTERED
+   ============================================ */
+.home-quicklinks {
+  padding: var(--section-padding) 0 !important;
+  background: var(--luxury-soft-gray);
+  width: 100% !important;
+}
+
+.home-quicklinks > .container {
+  width: 100% !important;
+  max-width: var(--container-max) !important;
+  margin: 0 auto !important;
+}
+
+.home-quicklinks .section-title {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--brand-blue);
+  text-align: center;
+  margin-bottom: 2.5rem !important;
+}
+
+.quicklinks-row {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 1.5rem !important;
+  width: 100% !important;
+  max-width: var(--container-max) !important;
+  margin: 0 auto !important;
+}
+
+.quicklink {
+  background: #fff !important;
+  border: 1px solid var(--luxury-border) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06) !important;
+  padding: 2rem !important;
+  transition: var(--transition-smooth) !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+.quicklink:hover {
+  transform: translateY(-8px) !important;
+  box-shadow: 0 20px 50px rgba(79, 140, 255, 0.15) !important;
+  border-color: rgba(79, 140, 255, 0.3) !important;
+}
+
+.quicklink img {
+  width: 56px !important;
+  height: 56px !important;
+  border-radius: 12px !important;
+  object-fit: cover;
+}
+
+.quicklink strong {
+  font-family: var(--font-display) !important;
+  font-size: 1.15rem !important;
+  color: var(--brand-navy-light) !important;
+  display: block;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.quicklink .muted {
+  font-size: 0.9rem !important;
+  color: var(--luxury-muted-text) !important;
+  line-height: 1.6;
+}
+
+/* ============================================
+   FOOTER
+   ============================================ */
+footer {
+  background: var(--brand-navy) !important;
+  padding: 2.5rem 0 !important;
+  width: 100%;
+}
+
+footer .container {
+  text-align: center;
+}
+
+footer p {
+  color: rgba(255,255,255,0.7) !important;
+  font-size: 0.9rem;
+}
+
+/* ============================================
+   CHAT WIDGET
+   ============================================ */
+.chat-widget-button {
+  background: #fff !important;
+  box-shadow: 0 10px 30px rgba(15, 30, 80, 0.25) !important;
+}
+
+.chat-widget-button::after,
+.chat-widget-button::before {
+  content: none !important;
+  display: none !important;
+}
+
+.chat-widget-button:hover {
+  transform: translateY(-3px) scale(1.05) !important;
+  box-shadow: 0 14px 40px rgba(15, 30, 80, 0.35) !important;
+}
+
+.chat-widget-header {
+  background: linear-gradient(135deg, var(--brand-blue) 0%, var(--brand-blue-light) 100%) !important;
+}
+
+.chat-widget-teaser {
+  background: var(--brand-navy) !important;
+  border-radius: 999px !important;
+}
+
+.chat-widget-teaser::after,
+.chat-widget-teaser::before,
+.chat-widget-teaser-close::after,
+.chat-widget-teaser-close::before {
+  content: none !important;
+  display: none !important;
+}
+
+/* ============================================
+   INTRO OVERLAY
+   ============================================ */
+.intro-overlay {
+  background: var(--luxury-warm-white) !important;
+}
+
+.intro-line-small {
+  font-family: var(--font-body) !important;
+  font-size: 1rem !important;
+  letter-spacing: 0.2em !important;
+  text-transform: uppercase !important;
+  color: var(--luxury-muted-text) !important;
+}
+
+.intro-line-main {
+  font-family: var(--font-cursive) !important;
+  font-size: clamp(2.5rem, 6vw, 4rem) !important;
+  color: var(--brand-blue) !important;
+  font-weight: 400 !important;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+@media (max-width: 1024px) {
+  .dmariners-album,
+  .wennrod-album,
+  .bicotels-album,
+  .hotel-gallery-thumbs {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  
+  .hotel-gallery-card ul {
+    columns: 1;
+  }
+  
+  .quicklinks-row {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --section-padding: 3rem;
+    --container-max: 100%;
+  }
+  
+  .container {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  
+  .home-hero {
+    min-height: 50vh;
+  }
+  
+  .quicklinks-row {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+  
+  .hotel-gallery-hero {
+    min-height: 220px !important;
+  }
+  
+  .hotel-gallery-card > div:last-child {
+    padding: 1.5rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  header .container {
+    padding: 0.75rem 1rem !important;
+  }
+  
+  .nav-btn {
+    font-size: 0.8rem !important;
+    padding: 0.4rem 0.7rem !important;
+  }
+  
+  .dmariners-album,
+  .wennrod-album,
+  .bicotels-album,
+  .hotel-gallery-thumbs {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 4px !important;
+  }
+  
+  .home-hero .hero-copy h2 {
+    font-size: 2rem !important;
+  }
+}
+
+/* ============================================
+   UTILITIES & OVERRIDES
+   ============================================ */
+::selection {
+  background: var(--brand-blue);
+  color: #fff;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 3px;
+}
+
+/* Force all content visibility */
+.home-features *,
+.hotel-gallery-card *,
+.home-quicklinks *,
+main * {
+  visibility: visible !important;
+}
+
+/* Override any animation that hides content */
+.animate-on-scroll,
+.hero-copy > *,
+.feature-card,
+.quicklink {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+/* When animation class is added by JS */
+.will-animate {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.will-animate.animated {
+  opacity: 1;
+  transform: translateY(0);
+}

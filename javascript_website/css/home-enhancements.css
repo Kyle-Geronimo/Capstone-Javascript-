@@ -126,9 +126,16 @@ body.intro-active .chat-widget {
 }
 .trust-features li { color:#64748b; font-weight:600; font-size:0.95rem; }
 
-/* Features grid */
-.home-features { padding: 2.25rem 0; }
-.home-features .container { max-width: 1100px; margin: 0 auto; }
+/* Features grid / hotel hero area */
+.home-features {
+  padding: 0 0 2.25rem 0;
+}
+.home-features .container {
+  max-width: none;       /* allow full-width hero like reference */
+  width: 100%;
+  margin: 0;
+  padding: 0;            /* hero touches screen edges */
+}
 /* About LinkHotel typed line */
 .about-typed-wrap {
   margin-top: 1.25rem;
@@ -249,6 +256,11 @@ body.intro-active .chat-widget {
     grid-template-columns: 1fr;
     overflow-x: visible;
   }
+
+  /* On small screens, don't force full viewport height so content scrolls naturally */
+  .hotel-gallery-hero {
+    min-height: 260px;
+  }
 }
 
 /* Minor polish for section titles */
@@ -266,11 +278,21 @@ body.intro-active .chat-widget {
   overflow: hidden;
 }
 
+/* Make hotel gallery cards blend into the page (no white box) */
+.home-features .card.hotel-gallery-card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0 !important;  /* override inline padding so hero is not boxed */
+  margin-top: 0 !important;
+  border-radius: 0;
+}
+
 .hotel-gallery-hero {
   position: relative;
-  border-radius: 14px;
+  border-radius: 0;       /* no rounded box, looks like full banner */
   overflow: hidden;
-  min-height: 220px;
+  min-height: 360px; /* wide banner height instead of very tall box */
   background-size: cover;
   background-position: center;
   display: flex;
@@ -319,8 +341,8 @@ body.intro-active .chat-widget {
 .wennrod-album,
 .bicotels-album {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); /* larger tiles for new hero role */
+  gap: 18px;
 }
 
 /* Gallery thumbnails as perfect squares */
@@ -328,7 +350,7 @@ body.intro-active .chat-widget {
 .wennrod-album img,
 .bicotels-album img {
   width: 100%;
-  aspect-ratio: 1 / 1; /* perfect square */
+  aspect-ratio: 4 / 3; /* larger, more cinematic tiles */
   object-fit: cover;
   border-radius: 12px;
   display: block;

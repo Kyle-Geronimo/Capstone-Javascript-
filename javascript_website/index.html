@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/image/logo/HTLogo.png">
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/home-enhancements.css">
+  <link rel="stylesheet" href="css/home-luxury-redesign.css">
   <!-- Luxury serif + cursive fonts for customer home -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,8 +33,7 @@
         <span class="nav-toggle-bar"></span>
       </button>
       <nav id="main-nav">
-        <a href="#home" class="nav-btn">Home</a>
-        <a href="#about" class="nav-btn public-only">About Us</a>
+        <a href="#about" class="nav-btn public-only">Home</a>
         <a href="#contacts" class="nav-btn public-only">Contacts</a>
         <a href="pages/login.html" class="nav-btn public-only">Login</a>
       </nav>
@@ -41,39 +41,13 @@
   </header>
 
   <main>
-    <!-- HERO / HOME SECTION -->
-    <section class="home-hero" id="home">
-      <div class="container hero-inner">
-        <div class="hero-copy">
-          <h2 style="margin-top: 3rem; font-size: 60px;">Experience the magic that awaits behind our doors</h2>
-          <p class="lead" style="margin-top: 2rem;">HotelLink connects you with partner hotels in Kumintang Ibaba so you can enjoy seamless, comfortable stays — from check‑in to check‑out.</p>
-        </div>
-
-        <!-- kept for decorative illustration / hero-only content; removed weather from here -->
-        <aside class="hero-panel" aria-hidden="true">
-          <div class="panel card">
-            <img src="/image/logo/HTLogo.png" alt="" style="width:100%;max-width:320px;margin-top:12px;" />
-          </div>
-        </aside>
-      </div>
-    </section>
-
-    <!-- ABOUT US / FEATURES (typed cursive tagline) -->
+    <!-- HOTEL HERO GALLERIES (now main hero content) -->
     <section class="home-features" id="about">
       <div class="container">
-        <h3 class="section-title">About HotelLink</h3>
-
-        <!-- Cursive typed animation line -->
-        <div class="about-typed-wrap">
-          <p class="about-typed-lead">HotelLink is all about</p>
-          <p class="about-typed-line">
-            <span id="about-typed-text"></span>
-            <span class="typed-cursor">|</span>
-          </p>
-        </div>
 
         <!-- D' Mariners Hotel – Gallery -->
         <div class="card hotel-gallery-card" style="margin-top: 2.5rem; padding: 1.5rem; display:flex; flex-direction:column; gap:1.25rem;">
+
           <div class="hotel-gallery-hero dmariners-hero">
             <div class="hotel-gallery-hero-inner">
               <h4>D’ Mariners Hotel – Gallery</h4>
@@ -82,6 +56,7 @@
           </div>
 
           <div class="hotel-gallery-thumbs dmariners-album" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px;">
+
             <a href="/hotelimages/d1.jpg" class="dmariners-thumb gallery-thumb">
               <img src="/hotelimages/d1.jpg" alt="D’ Mariners Hotel room 1" />
             </a>
@@ -96,7 +71,11 @@
             </a>
           </div>
 
-          <div style="margin-top:0.75rem;">
+          <div style="margin-top:0.75rem; text-align:center;">
+            <button class="hotel-details-toggle-btn" data-target="dmariners-details">Show details</button>
+          </div>
+
+          <div id="dmariners-details" class="hotel-why" style="margin-top:0.75rem; display:none;">
             <h4 style="margin:0 0 0.35rem 0;">WHY CHOOSE D’ MARINERS HOTEL</h4>
             <ul class="muted" style="list-style: disc; padding-left: 1.5rem; margin:0 0 0.5rem 0;">
               <li>Clean, cozy, and well-maintained rooms</li>
@@ -110,10 +89,12 @@
               business visit, or quick rest, we ensure satisfaction every time.
             </p>
           </div>
+
         </div>
 
         <!-- Wennrod Hotel – Gallery -->
         <div class="card hotel-gallery-card" style="margin-top: 1.75rem; padding: 1.5rem; display:flex; flex-direction:column; gap:1.25rem;">
+
           <div class="hotel-gallery-hero wennrod-hero">
             <div class="hotel-gallery-hero-inner">
               <h4>Wennrod Hotel – Gallery</h4>
@@ -122,6 +103,7 @@
           </div>
 
           <div class="hotel-gallery-thumbs wennrod-album" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px;">
+
             <a href="/hotelimages/wen1.jpg" class="wennrod-thumb gallery-thumb">
               <img src="/hotelimages/wen1.jpg" alt="Wennrod Hotel room 1" />
             </a>
@@ -136,7 +118,11 @@
             </a>
           </div>
 
-          <div style="margin-top:0.75rem;">
+          <div style="margin-top:0.75rem; text-align:center;">
+            <button class="hotel-details-toggle-btn" data-target="wennrod-details">Show details</button>
+          </div>
+
+          <div id="wennrod-details" class="hotel-why" style="margin-top:0.75rem; display:none;">
             <h4 style="margin:0 0 0.35rem 0;">WHY CHOOSE WENNROD HOTEL</h4>
             <ul class="muted" style="list-style: disc; padding-left: 1.5rem; margin:0 0 0.5rem 0;">
               <li>Comfortable 2-star rooms with air‑conditioning</li>
@@ -150,10 +136,12 @@
               thoughtful room amenities for both short and longer visits.
             </p>
           </div>
+
         </div>
 
         <!-- Bicotels Hotel – Gallery -->
         <div class="card hotel-gallery-card" style="margin-top: 1.75rem; padding: 1.5rem; display:flex; flex-direction:column; gap:1.25rem;">
+
           <div class="hotel-gallery-hero bicotels-hero">
             <div class="hotel-gallery-hero-inner">
               <h4>Bicotels Hotel – Gallery</h4>
@@ -162,6 +150,7 @@
           </div>
 
           <div class="hotel-gallery-thumbs bicotels-album" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px;">
+
             <a href="/hotelimages/bic1.jpg" class="bicotels-thumb gallery-thumb">
               <img src="/hotelimages/bic1.jpg" alt="Bicotels Hotel room 1" />
             </a>
@@ -176,7 +165,11 @@
             </a>
           </div>
 
-          <div style="margin-top:0.75rem;">
+          <div style="margin-top:0.75rem; text-align:center;">
+            <button class="hotel-details-toggle-btn" data-target="bicotels-details">Show details</button>
+          </div>
+
+          <div id="bicotels-details" class="hotel-why" style="margin-top:0.75rem; display:none;">
             <h4 style="margin:0 0 0.35rem 0;">WHY CHOOSE BICOTELS HOTEL</h4>
             <ul class="muted" style="list-style: disc; padding-left: 1.5rem; margin:0 0 0.5rem 0;">
               <li>Comfortable rooms with air‑conditioning</li>
@@ -190,6 +183,7 @@
               businesses, dining, and transport hubs around Batangas City.
             </p>
           </div>
+
         </div>
 
       </div>
@@ -461,25 +455,20 @@
       });
     }
 
-    // Wennrod Hotel "See more" toggle
-    const wennrodToggle = document.getElementById('wennrod-toggle');
-    const wennrodMore = document.getElementById('wennrod-more');
-    if (wennrodToggle && wennrodMore) {
-      wennrodToggle.addEventListener('click', () => {
-        const isHidden = wennrodMore.style.display === 'none' || !wennrodMore.style.display;
-        wennrodMore.style.display = isHidden ? 'inline' : 'none';
-        wennrodToggle.textContent = isHidden ? 'See less' : 'See more...';
-      });
-    }
+    // Generic hotel details show/less toggle
+    const hotelDetailButtons = document.querySelectorAll('.hotel-details-toggle-btn');
+    if (hotelDetailButtons && hotelDetailButtons.length) {
+      hotelDetailButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const targetId = btn.getAttribute('data-target');
+          if (!targetId) return;
+          const detailsEl = document.getElementById(targetId);
+          if (!detailsEl) return;
 
-    // Bicotels Hotel "See more" toggle
-    const bicotelsToggle = document.getElementById('bicotels-toggle');
-    const bicotelsMore = document.getElementById('bicotels-more');
-    if (bicotelsToggle && bicotelsMore) {
-      bicotelsToggle.addEventListener('click', () => {
-        const isHidden = bicotelsMore.style.display === 'none' || !bicotelsMore.style.display;
-        bicotelsMore.style.display = isHidden ? 'inline' : 'none';
-        bicotelsToggle.textContent = isHidden ? 'See less' : 'See more...';
+          const isHidden = detailsEl.style.display === 'none' || !detailsEl.style.display;
+          detailsEl.style.display = isHidden ? 'block' : 'none';
+          btn.textContent = isHidden ? 'Less details' : 'Show details';
+        });
       });
     }
 
@@ -558,7 +547,7 @@
       chatMessages.scrollTop = chatMessages.scrollHeight;
     };
 
-    const CHAT_API_BASE = window.API_BASE || 'https://mariners-chatbot.cloud';
+    const CHAT_API_BASE = window.API_BASE || 'http://localhost:4000';
 
     const sendToChatbot = async (message) => {
       try {

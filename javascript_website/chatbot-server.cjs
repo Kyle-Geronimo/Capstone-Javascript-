@@ -184,7 +184,7 @@ const db = new RestrictedFirestore(rawDb, ALLOWED_COLLECTIONS);
 // =============================================================================
 
 const HOTEL_ROOM_INVENTORY = {
-  "D'Mariners Inn Hotel": Array.from({ length: 42 }, (_, i) => String(i + 1)), // Rooms 1-25
+  "D'Mariners Inn Hotel": Array.from({ length: 25 }, (_, i) => String(i + 1)), // Rooms 1-25
   "Wennrod Hotel": Array.from({ length: 25 }, (_, i) => String(i + 1)), // Rooms 1-25
   "Bicotels Hotel": Array.from({ length: 25 }, (_, i) => String(i + 1)) // Rooms 1-25
 };
@@ -269,7 +269,7 @@ checkFirestoreConnection();
 
 // --- 2. Initialize Gemini ---
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' });
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
 // Middleware
 app.use(cors({ origin: true }));
@@ -1404,7 +1404,7 @@ ${userMessage}
 
           prompt = `
 You are a helpful hotel reservation assistant for Mariners Hotel. Use ONLY the CONTEXT INFORMATION below to answer the user's question.
-If the exact fact is not in the context, say "I don't have that information in my context." You cannot book rooms for customers. Answer with "Please contact the desired hotel for any concerns with booking a room." if presented with a question like that.
+If the exact fact is not in the context, say "I don't have that information in my context."
 
 ${enrichedContext ? `REAL-TIME DATA:\n${enrichedContext}\n` : ''}
 
