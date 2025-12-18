@@ -61,7 +61,8 @@
         var doc = new jsPDF('p', 'pt', 'a4');
 
         var head = [[
-          'Guest Name',
+          'First Name',
+          'Last Name',
           'Hotel',
           'Room',
           'Check-in',
@@ -72,7 +73,7 @@
         var body = [];
         rows.forEach(function (tr) {
           var cells = tr.querySelectorAll('td');
-          if (!cells || cells.length < 6) return;
+          if (!cells || cells.length < 7) return;
           if (tr.querySelector('.no-data')) return;
 
           body.push([
@@ -81,7 +82,8 @@
             (cells[2].textContent || '').trim(),
             (cells[3].textContent || '').trim(),
             (cells[4].textContent || '').trim(),
-            (cells[5].textContent || '').trim()
+            (cells[5].textContent || '').trim(),
+            (cells[6].textContent || '').trim()
           ]);
         });
 

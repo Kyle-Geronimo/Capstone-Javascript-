@@ -106,7 +106,7 @@ export async function loadChatbotData() {
                                 <th style="width:32px;text-align:center;"><input type="checkbox" class="chat-select-all" aria-label="Select all conversations" /></th>
                                 <th class="sortable" data-sort="time">
                                     Time
-                                    <span class="sort-icon">↕</span>
+                                    <span class="sort-icon">â†•</span>
                                 </th>
                                 <th>Question</th>
                                 <th>Bot reply</th>
@@ -156,7 +156,7 @@ export async function loadChatbotData() {
                 <div class="chat-convo-modal">
                     <div class="chat-convo-header">
                         <h3>Conversation</h3>
-                        <button type="button" class="chat-convo-close" aria-label="Close">×</button>
+                        <button type="button" class="chat-convo-close" aria-label="Close">Ã—</button>
                     </div>
                     <div class="chat-convo-body">
                         <div class="chat-convo-question"><strong>Question:</strong> <span>${escapeHtml(questionText)}</span></div>
@@ -210,7 +210,7 @@ export async function loadChatbotData() {
             });
 
             timeSort = timeSort === 'desc' ? 'asc' : 'desc';
-            timeHeader.querySelector('.sort-icon').textContent = timeSort === 'desc' ? '↓' : '↑';
+            timeHeader.querySelector('.sort-icon').textContent = timeSort === 'desc' ? 'â†“' : 'â†‘';
 
             tbody.innerHTML = '';
             rows.forEach(row => tbody.appendChild(row));
@@ -284,7 +284,7 @@ export async function loadChatbotData() {
                     <h1>Chatbot Conversations</h1>
                     ${items.map(item => `
                         <div class="conv">
-                            <div class="meta">${item.timeText} · ${item.categoryText}</div>
+                            <div class="meta">${item.timeText} Â· ${item.categoryText}</div>
                             <div class="q">Q: ${item.questionText}</div>
                             <div class="a">A: ${item.answerText}</div>
                         </div>
@@ -1206,7 +1206,8 @@ export function initReservationDashboard() {
                 <form id="guestForm" class="guest-form">
                     <input type="hidden" id="reservationId" />
                     <div class="guest-form-row">
-                        <div class="guest-form-group"><label for="guestName">Guest name</label><input type="text" id="guestName" placeholder="e.g. Juan Dela Cruz" required /></div>
+                        <div class="guest-form-group"><label for="guestFirstName">First name</label><input type="text" id="guestFirstName" placeholder="e.g. Juan" required /></div>
+                        <div class="guest-form-group"><label for="guestLastName">Last name</label><input type="text" id="guestLastName" placeholder="e.g. Dela Cruz" required /></div>
                         <div class="guest-form-group"><label for="guestRoom">Room</label><input type="text" id="guestRoom" placeholder="e.g. 203" required /></div>
                         <div class="guest-form-group"><label for="guestStatus">Status</label><select id="guestStatus" required><option value="in-house">In-house</option><option value="reserved">Reserved</option><option value="checked-out">Checked out</option></select></div>
                     </div>
@@ -1248,7 +1249,8 @@ export function initReservationDashboard() {
                     <table class="data-table guest-table">
                         <thead>
                             <tr>
-                                <th>Guest Name</th>
+                                <th>First Name</th>
+                                <th>Last Name</th>
                                 <th>Hotel</th>
                                 <th>Room</th>
                                 <th>Check-in</th>
@@ -1299,7 +1301,8 @@ export function initReservationDashboard() {
 
     const guestForm = document.getElementById('guestForm');
     const reservationIdInput = document.getElementById('reservationId');
-    const guestNameInput = document.getElementById('guestName');
+    const guestFirstNameInput = document.getElementById('guestFirstName');
+    const guestLastNameInput = document.getElementById('guestLastName');
     const guestRoomInput = document.getElementById('guestRoom');
     const guestCheckInInput = document.getElementById('guestCheckIn');
     const guestCheckOutInput = document.getElementById('guestCheckOut');
@@ -1468,10 +1471,11 @@ export function initReservationDashboard() {
             if (fromD && ci && ci < fromD) return false;
             if (toD && ci && ci > toD) return false;
             if (searchVal) {
-                const n = (r.guestName || '').toLowerCase();
+                const fn = (r.firstName || '').toLowerCase();
+                const ln = (r.lastName || '').toLowerCase();
                 const rm = (r.room || '').toLowerCase();
                 const h = (r.hotel || '').toLowerCase();
-                if (!n.includes(searchVal) && !rm.includes(searchVal) && !h.includes(searchVal)) return false;
+                if (!fn.includes(searchVal) && !ln.includes(searchVal) && !rm.includes(searchVal) && !h.includes(searchVal)) return false;
             }
             return true;
         });
@@ -1480,7 +1484,7 @@ export function initReservationDashboard() {
         const rowsToRender = (!shouldPaginate || showingAllGuests) ? filtered : filtered.slice(0, 5);
 
         if (!rowsToRender.length) {
-            guestTableBody.innerHTML = `<tr><td colspan="7"><div class="no-data">No reservations found for the selected filters.</div></td></tr>`;
+            guestTableBody.innerHTML = `<tr><td colspan="8"><div class="no-data">No reservations found for the selected filters.</div></td></tr>`;
             if (guestPagination) guestPagination.innerHTML = '';
             return;
         }
@@ -1491,7 +1495,8 @@ export function initReservationDashboard() {
             const st = r.status || 'reserved';
             return `
                 <tr data-id="${r.id}">
-                    <td>${escapeHtml(r.guestName || '')}</td>
+                    <td>${escapeHtml(r.firstName || '')}</td>
+                    <td>${escapeHtml(r.lastName || '')}</td>
                     <td>${escapeHtml(r.hotel || '')}</td>
                     <td>${escapeHtml(r.room || '')}</td>
                     <td>${escapeHtml(ci)}</td>
@@ -1537,7 +1542,8 @@ export function initReservationDashboard() {
                 const rec = reservations.find(r => r.id === id);
                 if (!rec) return;
                 reservationIdInput.value = rec.id;
-                guestNameInput.value = rec.guestName || '';
+                guestFirstNameInput.value = rec.firstName || '';
+                guestLastNameInput.value = rec.lastName || '';
                 guestRoomInput.value = rec.room || '';
                 guestCheckInInput.value = fmtDate(asDateOnly(rec.checkIn));
                 guestCheckOutInput.value = fmtDate(asDateOnly(rec.checkOut));
@@ -1552,14 +1558,16 @@ export function initReservationDashboard() {
                 const id = tr?.getAttribute('data-id');
                 if (!id) return;
                 const rec = reservations.find(r => r.id === id);
-                openDeleteModal(id, rec?.guestName || 'this reservation');
+                const fullName = rec ? `${rec.firstName || ''} ${rec.lastName || ''}`.trim() : 'this reservation';
+                openDeleteModal(id, fullName || 'this reservation');
             });
         });
     };
 
     const clearForm = () => {
         reservationIdInput.value = '';
-        guestNameInput.value = '';
+        guestFirstNameInput.value = '';
+        guestLastNameInput.value = '';
         guestRoomInput.value = '';
         guestCheckInInput.value = '';
         guestCheckOutInput.value = '';
@@ -1574,13 +1582,14 @@ export function initReservationDashboard() {
 
     guestForm?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const name = guestNameInput.value.trim();
+        const firstName = guestFirstNameInput.value.trim();
+        const lastName = guestLastNameInput.value.trim();
         const room = guestRoomInput.value.trim();
         const ciVal = guestCheckInInput.value;
         const coVal = guestCheckOutInput.value;
         const hotel = guestHotelInput?.value || "D'Mariners Inn Hotel";
         const status = guestStatusInput.value;
-        if (!name || !room || !ciVal || !coVal || !hotel) {
+        if (!firstName || !lastName || !room || !ciVal || !coVal || !hotel) {
             setGuestMessage('Please fill in all required fields before saving.', 'error');
             return;
         }
@@ -1598,7 +1607,8 @@ export function initReservationDashboard() {
             return;
         }
         const payload = {
-            guestName: name,
+            firstName,
+            lastName,
             room,
             checkIn: ci,
             checkOut: co,
@@ -1640,7 +1650,7 @@ export function initReservationDashboard() {
     }, (err) => {
         console.error('Error loading guest reservations', err);
         if (guestTableBody) {
-            guestTableBody.innerHTML = `<tr><td colspan="6"><div class="error-message">Error loading guest reservations: ${escapeHtml(err.message)}</div></td></tr>`;
+            guestTableBody.innerHTML = `<tr><td colspan="8"><div class="error-message">Error loading guest reservations: ${escapeHtml(err.message)}</div></td></tr>`;
         }
     });
 }
