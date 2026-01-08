@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Great+Vibes&display=swap" rel="stylesheet">
 </head>
-
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <body>
   <!-- Opening intro overlay: shows before any content -->
   <div id="intro-overlay" class="intro-overlay" aria-hidden="true">
@@ -536,16 +536,24 @@
     }
 
     const appendMessage = (text, from = 'bot') => {
-      if (!chatMessages) return;
-      const wrapper = document.createElement('div');
-      wrapper.className = `chat-message chat-message-${from}`;
-      const bubble = document.createElement('div');
-      bubble.className = 'chat-bubble';
-      bubble.textContent = text;
-      wrapper.appendChild(bubble);
-      chatMessages.appendChild(wrapper);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-    };
+  if (!chatMessages) return;
+  const wrapper = document.createElement('div');
+  wrapper.className = `chat-message chat-message-${from}`;
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble';
+
+  // FIX: If it's the bot, render Markdown HTML. If it's the user, keep it plain text.
+  if (from === 'bot') {
+    // marked.parse turns markdown into safe HTML
+    bubble.innerHTML = marked.parse(text);
+  } else {
+    bubble.textContent = text;
+  }
+
+  wrapper.appendChild(bubble);
+  chatMessages.appendChild(wrapper);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+};
 
     const CHAT_API_BASE = window.API_BASE || 'https://mariners-chatbot.cloud';
 

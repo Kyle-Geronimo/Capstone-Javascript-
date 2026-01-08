@@ -5108,3 +5108,22 @@ main {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Formatting for Chatbot Response */
+.chat-bubble p {
+  margin: 0 0 10px 0; /* Add space between paragraphs */
+}
+.chat-bubble p:last-child {
+  margin-bottom: 0;
+}
+.chat-bubble ul, .chat-bubble ol {
+  margin: 5px 0 10px 20px; /* Indent lists */
+  padding-left: 0;
+  list-style-type: disc; /* Ensure dots show up */
+}
+.chat-bubble li {
+  margin-bottom: 5px;
+}
+.chat-bubble strong {
+  font-weight: bold; /* Ensure bold text stands out */
+}

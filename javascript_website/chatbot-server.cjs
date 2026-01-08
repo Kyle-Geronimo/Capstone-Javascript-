@@ -1377,6 +1377,8 @@ ${availability.availableRooms.map(r => `• ${r.roomtype} #${r.roomnumber}${r.pr
 
           prompt = `
 You are a helpful hotel assistant. Use the context if it contains relevant facts.
+Always format your responses using Markdown. Use bolding (**text**) for hotel names and prices. Use bullet points (*) for lists. 
+Always put a double new line between different sections to ensure clarity.
 If the context has partial information, make a best-effort helpful answer.
 If price or roomtype is mentioned in context, extract and present it clearly.
 If something is not explicitly stated, it's okay to say "I don't have that detail, but here's what I can confirm."
