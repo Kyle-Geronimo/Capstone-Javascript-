@@ -5127,3 +5127,31 @@ main {
 .chat-bubble strong {
   font-weight: bold; /* Ensure bold text stands out */
 }
+
+/* Add to styles.css */
+details.room-details-dropdown {
+    margin: 15px 0;
+    border-top: 1px solid #eee;
+    padding-top: 10px;
+}
+
+details.room-details-dropdown summary {
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--brand-blue); /* Using your variable from v8 css */
+    font-weight: 600;
+    list-style: none; /* Hides default triangle */
+    text-align: center;
+}
+
+details.room-details-dropdown summary:hover {
+    text-decoration: underline;
+}
+
+/* Smooth fade in for details */
+.details-content {
+    animation: fadeIn 0.3s ease-in;
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: #666;
+}
